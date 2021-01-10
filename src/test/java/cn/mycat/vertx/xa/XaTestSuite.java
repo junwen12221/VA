@@ -22,18 +22,28 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 @ExtendWith(VertxExtension.class)
-public class HappyPass {
-    MySQLManagerImpl mySQLManager = new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3307)
-            , demoConfig("ds2", 3306)));
-    XaLogImpl xaLog = new XaLogImpl();
+public abstract class XaTestSuite {
+    private final MySQLManager mySQLManager;
+    private final XaLog xaLog;
+    private final BiFunction<MySQLManager, XaLog, XaSqlConnection> factory;
+    //    MySQLManagerImpl mySQLManager = new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3307)
+//            , demoConfig("ds2", 3306)));
+//    XaLogImpl xaLog = new XaLogImpl();
     String DB1 = System.getProperty("db1", "jdbc:mysql://127.0.0.1:3306/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
     String DB2 = System.getProperty("db2", "jdbc:mysql://127.0.0.1:3307/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
 
 
-    public HappyPass() throws Exception {
+    public XaTestSuite(MySQLManager mySQLManager,
+                       XaLog xaLog,
+                       BiFunction<MySQLManager,XaLog,XaSqlConnection> factory) throws Exception {
+        this.mySQLManager = mySQLManager;
+        this.xaLog = xaLog;
+        this.factory = factory;
+
         Connection mySQLConnection = getMySQLConnection(DB2);
         extracteInitSql(mySQLConnection);
         mySQLConnection.close();
@@ -59,7 +69,7 @@ public class HappyPass {
 
     @Test
     public void begin(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.begin(new Handler<AsyncResult<Void>>() {
             @Override
             public void handle(AsyncResult<Void> event) {
@@ -72,7 +82,7 @@ public class HappyPass {
 
     @Test
     public void beginCommit(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.begin(event -> baseXaSqlConnection.commit(new Handler<AsyncResult<Future>>() {
             @Override
             public void handle(AsyncResult<Future> event) {
@@ -85,7 +95,7 @@ public class HappyPass {
 
     @Test
     public void beginRollback(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.begin(event -> baseXaSqlConnection.rollback(new Handler<AsyncResult<Future>>() {
             @Override
             public void handle(AsyncResult<Future> event) {
@@ -98,7 +108,7 @@ public class HappyPass {
 
     @Test
     public void beginBegin(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.begin(new Handler<AsyncResult<Void>>() {
             @Override
             public void handle(AsyncResult<Void> event) {
@@ -113,7 +123,7 @@ public class HappyPass {
 
     @Test
     public void rollback(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.rollback(new Handler<AsyncResult<Future>>() {
             @Override
             public void handle(AsyncResult<Future> event) {
@@ -126,7 +136,7 @@ public class HappyPass {
 
     @Test
     public void commit(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.commit(new Handler<AsyncResult<Future>>() {
             @Override
             public void handle(AsyncResult<Future> event) {
@@ -139,7 +149,7 @@ public class HappyPass {
 
     @Test
     public void close(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.close(new Handler<AsyncResult<Future>>() {
             @Override
             public void handle(AsyncResult<Future> event) {
@@ -152,7 +162,7 @@ public class HappyPass {
 
     @Test
     public void closeInTranscation(VertxTestContext testContext) {
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.begin(new Handler<AsyncResult<Void>>() {
             @Override
             public void handle(AsyncResult<Void> event) {
@@ -171,7 +181,7 @@ public class HappyPass {
     @Test
     public void beginSingleTargetInsertCommit(VertxTestContext testContext) throws Exception {
         clearData();
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection =  factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.begin(event -> {
             Assertions.assertTrue(event.succeeded());
             Future<SqlConnection> ds1 = baseXaSqlConnection.getConnection("ds1");
@@ -214,7 +224,7 @@ public class HappyPass {
     @Test
     public void beginDoubleTargetInsertCommit(VertxTestContext testContext) throws Exception {
         clearData();
-        BaseXaSqlConnection baseXaSqlConnection = new BaseXaSqlConnection(xaLog, mySQLManager);
+        XaSqlConnection baseXaSqlConnection =  factory.apply(mySQLManager,xaLog);
         baseXaSqlConnection.begin(event -> {
             Assertions.assertTrue(event.succeeded());
             Future<SqlConnection> ds1 = baseXaSqlConnection.getConnection("ds1");
@@ -269,7 +279,7 @@ public class HappyPass {
         mySQLConnection.close();
     }
 
-    public SimpleConfig demoConfig(String name, int port) {
+    public static SimpleConfig demoConfig(String name, int port) {
         SimpleConfig simpleConfig = new SimpleConfig(name, "127.0.0.1", port, "root", "123456", "mysql", 5);
         return simpleConfig;
     }

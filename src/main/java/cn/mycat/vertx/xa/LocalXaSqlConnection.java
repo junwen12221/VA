@@ -11,13 +11,14 @@ public class LocalXaSqlConnection extends OnePhaseXaSqlConnection {
     volatile SqlConnection localSqlConnection = null;
     volatile String targetName;
 
-    public LocalXaSqlConnection(XaLog xaLog, MySQLManager mySQLManager) {
-        super(xaLog, mySQLManager);
+    public LocalXaSqlConnection(MySQLManager mySQLManager,XaLog xaLog) {
+        super( mySQLManager,xaLog);
     }
 
     @Override
     public void commit(Handler<AsyncResult<Future>> handler) {
         if (targetName == null && localSqlConnection == null && map.isEmpty()) {
+            inTranscation = false;
             handler.handle(Future.succeededFuture());
             return;
         }
@@ -33,7 +34,7 @@ public class LocalXaSqlConnection extends OnePhaseXaSqlConnection {
     @Override
     public Future<SqlConnection> getConnection(String targetName) {
         if (inTranscation) {
-            if (targetName == null && localSqlConnection == null) {
+            if (this.targetName == null && localSqlConnection == null) {
                 LocalXaSqlConnection.this.targetName = targetName;
                 Future<SqlConnection> sqlConnectionFuture = mySQLManager.getConnection(targetName);
                 return sqlConnectionFuture.map(sqlConnection -> {
@@ -41,7 +42,7 @@ public class LocalXaSqlConnection extends OnePhaseXaSqlConnection {
                     return sqlConnection;
                 }).compose(sqlConnection -> sqlConnection.begin().map(sqlConnection));
             }
-            if (LocalXaSqlConnection.this.targetName.equals(targetName)) {
+            if (this.targetName!=null&&this.targetName.equals(targetName)) {
                 return Future.succeededFuture(localSqlConnection);
             }
             return super.getConnection(targetName);

@@ -22,7 +22,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     protected String xid;
     final static AtomicLong ID = new AtomicLong();
 
-    public BaseXaSqlConnection(XaLog xaLog, MySQLManager mySQLManager) {
+    public BaseXaSqlConnection(MySQLManager mySQLManager,XaLog xaLog) {
         super(xaLog);
         this.mySQLManager = mySQLManager;
     }

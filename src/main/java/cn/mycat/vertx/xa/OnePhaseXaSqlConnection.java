@@ -6,8 +6,8 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 
 public class OnePhaseXaSqlConnection extends BaseXaSqlConnection {
-    public OnePhaseXaSqlConnection(XaLog xaLog,MySQLManager mySQLManager) {
-        super(xaLog,mySQLManager);
+    public OnePhaseXaSqlConnection(MySQLManager mySQLManager,XaLog xaLog) {
+        super(mySQLManager,xaLog);
     }
 
     @Override
@@ -18,7 +18,15 @@ public class OnePhaseXaSqlConnection extends BaseXaSqlConnection {
             xaEnd.onSuccess(event -> {
                 executeAll(connection -> {
                     return connection.query(String.format(XA_COMMIT_ONE_PHASE, xid)).execute();
-                }).onComplete((Handler)handler);
+                }).onComplete(new Handler<AsyncResult<CompositeFuture>>() {
+                    @Override
+                    public void handle(AsyncResult<CompositeFuture> event) {
+                        if (event.succeeded()){
+                            inTranscation = false;
+                        }
+                        handler.handle((AsyncResult)event);
+                    }
+                });
             });
             }else{
                 super.commit(handler);
