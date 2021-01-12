@@ -13,7 +13,16 @@ public interface XaSqlConnection {
     public static String XA_ROLLBACK = "XA ROLLBACK '%s';";
     public static String XA_COMMIT_ONE_PHASE = "XA COMMIT '%s' ONE PHASE;";
     public static String XA_RECOVER = "XA RECOVER;";
-    public static String CMD_ALLOC_XID ="ALLOC XID '%s'";
+    public static String CMD_ALLOC_XID = "ALLOC XID '%s'";
+
+    enum State {
+        XA_INIT,
+        XA_START,
+        XA_END,
+        XA_PREPARE,
+        ;
+    }
+
     public void begin(Handler<AsyncResult<Void>> handler);
 
 
@@ -23,7 +32,7 @@ public interface XaSqlConnection {
 
     public void commit(Handler<AsyncResult<Future>> handler);
 
-    public  default void close(){
+    public default void close() {
         close(event -> {
 
         });

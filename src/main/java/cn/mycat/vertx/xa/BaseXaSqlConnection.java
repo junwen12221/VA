@@ -8,6 +8,7 @@ import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.SqlConnection;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,10 +19,11 @@ import java.util.stream.Collectors;
 
 public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     protected final ConcurrentHashMap<String, SqlConnection> map = new ConcurrentHashMap<>();
-
+    protected final IdentityHashMap<SqlConnection, State> connectionState = new IdentityHashMap<>();
     protected final MySQLManager mySQLManager;
     protected String xid;
     final static AtomicLong ID = new AtomicLong();
+    protected volatile State state = State.XA_INIT;
 
     public BaseXaSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
         super(xaLog);
@@ -47,10 +49,15 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 return Future.succeededFuture(map.get(targetName));
             } else {
                 Future<SqlConnection> sqlConnectionFuture = mySQLManager.getConnection(targetName);
+
                 return sqlConnectionFuture.compose(connection -> {
                     map.put(targetName, connection);
+                    connectionState.put(connection, State.XA_INIT);
                     Future<RowSet<Row>> execute = connection.query(String.format(XA_START, xid)).execute();
-                    return execute.map(r -> connection);
+                    return execute.map(r -> {
+                        connectionState.put(connection, State.XA_START);
+                        return connection;
+                    });
                 });
             }
         }
@@ -58,7 +65,29 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     }
 
     public void rollback(Handler<AsyncResult<Future>> handler) {
-        executeAll(c -> c.query(String.format(XA_ROLLBACK, xid)).execute())
+        executeAll(new Function<SqlConnection, Future>() {
+            @Override
+            public Future apply(SqlConnection c) {
+                Future future = Future.succeededFuture();
+                switch (connectionState.get(c)) {
+                    case XA_INIT:
+                        return future;
+                    case XA_START:
+                        future = future.compose(unused -> {
+                            return c.query(String.format(XA_END, xid)).execute()
+                                    .map(u -> connectionState.put(c, State.XA_END));
+                        });
+                    case XA_END:
+                        future = future.compose(unuse -> c.query(String.format(XA_PREPARE, xid)).execute())
+                                .map(u -> connectionState.put(c, State.XA_PREPARE));
+                        ;
+                    case XA_PREPARE:
+                        future = future.compose(unuse -> c.query(String.format(XA_ROLLBACK, xid)).execute())
+                                .map(u -> connectionState.put(c, State.XA_INIT));
+                }
+                return future;
+            }
+        })
                 .onComplete(new Handler<AsyncResult<CompositeFuture>>() {
                     @Override
                     public void handle(AsyncResult<CompositeFuture> event) {
@@ -76,7 +105,26 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     }
 
     public void commit(Supplier<Future> localFirstCommit, Handler<AsyncResult<Future>> handler) {
-        CompositeFuture xaEnd = executeAll(connection -> connection.query(String.format(XA_END, xid)).execute());
+        CompositeFuture xaEnd = executeAll(new Function<SqlConnection, Future>() {
+            @Override
+            public Future apply(SqlConnection connection) {
+                Future future = Future.succeededFuture();
+                switch (connectionState.get(connection)) {
+                    case XA_INIT:
+                        future = future
+                                .compose(unuse -> connection.query(String.format(XA_START, xid)).execute())
+                                .map(u -> connectionState.put(connection, State.XA_START));
+                    case XA_START:
+                        future = future
+                                .compose(unuse -> connection.query(String.format(XA_END, xid)).execute())
+                                .map(u -> connectionState.put(connection, State.XA_END));
+                    case XA_END:
+                    default:
+                }
+                return future;
+            }
+
+        });
         xaEnd.onFailure(event14 -> handler.handle(Future.failedFuture(event14)));
         xaEnd.onSuccess(event -> {
             executeAll(connection -> {
