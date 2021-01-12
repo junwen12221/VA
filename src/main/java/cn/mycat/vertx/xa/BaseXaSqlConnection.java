@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 
@@ -22,7 +23,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     protected String xid;
     final static AtomicLong ID = new AtomicLong();
 
-    public BaseXaSqlConnection(MySQLManager mySQLManager,XaLog xaLog) {
+    public BaseXaSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
         super(xaLog);
         this.mySQLManager = mySQLManager;
     }
@@ -71,6 +72,10 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     }
 
     public void commit(Handler<AsyncResult<Future>> handler) {
+        commit(() -> Future.succeededFuture(), handler);
+    }
+
+    public void commit(Supplier<Future> localFirstCommit, Handler<AsyncResult<Future>> handler) {
         CompositeFuture xaEnd = executeAll(connection -> connection.query(String.format(XA_END, xid)).execute());
         xaEnd.onFailure(event14 -> handler.handle(Future.failedFuture(event14)));
         xaEnd.onSuccess(event -> {
@@ -82,7 +87,8 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                         handler.handle(Future.failedFuture(event13));
                     })
                     .onSuccess(event12 -> {
-                        executeAll(connection -> {
+                        Future future = localFirstCommit.get();
+                        future.onSuccess(event16 -> executeAll(connection -> {
                             return connection.query(String.format(XA_COMMIT, xid)).execute();
                         })
                                 .onFailure(event15 -> {
@@ -93,14 +99,22 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                                 .onSuccess(event1 -> {
                                     inTranscation = false;
                                     clearConnections(event2 -> handler.handle(((AsyncResult) event1)));
-                                });
+                                }));
+                        future.onFailure(new Handler<Throwable>() {
+                            @Override
+                            public void handle(Throwable event) {
+                                //客户端触发回滚
+                                handler.handle(Future.failedFuture(event));
+                            }
+                        });
+
                     });
         });
     }
 
     public CompositeFuture executeAll(Function<SqlConnection, Future> connectionFutureFunction) {
-        if (map.isEmpty()){
-            return CompositeFuture.any(Future.succeededFuture(),Future.succeededFuture());
+        if (map.isEmpty()) {
+            return CompositeFuture.any(Future.succeededFuture(), Future.succeededFuture());
         }
         List<Future> futures = map.values().stream().map(connectionFutureFunction).collect(Collectors.toList());
         return CompositeFuture.all(futures);
@@ -109,7 +123,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     public void close(Handler<AsyncResult<Future>> handler) {
         if (inTranscation) {
             inTranscation = false;
-            rollback((Handler) handler);
+            rollback((Handler<AsyncResult<Future>>) handler);
         } else {
             inTranscation = false;
             CompositeFuture compositeFuture = executeAll(sqlConnection -> sqlConnection.close());

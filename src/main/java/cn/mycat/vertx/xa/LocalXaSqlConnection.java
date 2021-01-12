@@ -7,12 +7,12 @@ import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.SqlConnection;
 
-public class LocalXaSqlConnection extends OnePhaseXaSqlConnection {
+public class LocalXaSqlConnection extends BaseXaSqlConnection {
     volatile SqlConnection localSqlConnection = null;
     volatile String targetName;
 
-    public LocalXaSqlConnection(MySQLManager mySQLManager,XaLog xaLog) {
-        super( mySQLManager,xaLog);
+    public LocalXaSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
+        super(mySQLManager, xaLog);
     }
 
     @Override
@@ -22,10 +22,21 @@ public class LocalXaSqlConnection extends OnePhaseXaSqlConnection {
             handler.handle(Future.succeededFuture());
             return;
         }
+        if (targetName != null && localSqlConnection != null && map.isEmpty()) {
+            localSqlConnection.query("commit;").execute(event -> {
+                if (event.succeeded()) {
+                    inTranscation = false;
+                    handler.handle(Future.succeededFuture());
+                    return;
+                }
+                handler.handle(Future.failedFuture(event.cause()));
+            });
+            return;
+        }
         if (targetName != null && inTranscation && localSqlConnection != null) {
-            Future<RowSet<Row>> execute = localSqlConnection.query("commit;").execute();
-            execute.onSuccess(event -> LocalXaSqlConnection.super.commit(handler));
-            execute.onFailure((Handler) handler);//用户触发回滚
+            super.commit(()->{
+              return localSqlConnection.query("commit;").execute();
+            }, handler);
         } else {
             throw new AssertionError();
         }
@@ -42,7 +53,7 @@ public class LocalXaSqlConnection extends OnePhaseXaSqlConnection {
                     return sqlConnection;
                 }).compose(sqlConnection -> sqlConnection.begin().map(sqlConnection));
             }
-            if (this.targetName!=null&&this.targetName.equals(targetName)) {
+            if (this.targetName != null && this.targetName.equals(targetName)) {
                 return Future.succeededFuture(localSqlConnection);
             }
             return super.getConnection(targetName);

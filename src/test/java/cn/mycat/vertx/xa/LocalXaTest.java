@@ -1,8 +1,11 @@
 package cn.mycat.vertx.xa;
 
+import net.jcip.annotations.NotThreadSafe;
+
 import java.util.Arrays;
 import java.util.function.BiFunction;
 
+@net.jcip.annotations.NotThreadSafe
 public class LocalXaTest extends XaTestSuite {
     public LocalXaTest() throws Exception {
         super(new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3307)

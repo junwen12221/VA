@@ -3,6 +3,7 @@ package cn.mycat.vertx.xa;
 import java.util.Arrays;
 import java.util.function.BiFunction;
 
+@net.jcip.annotations.NotThreadSafe
 public class OnePhaseXaTest extends XaTestSuite {
     public OnePhaseXaTest() throws Exception {
         super(new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3307)
