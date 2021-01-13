@@ -23,7 +23,6 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     protected final MySQLManager mySQLManager;
     protected String xid;
     final static AtomicLong ID = new AtomicLong();
-    protected volatile State state = State.XA_INIT;
 
     public BaseXaSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
         super(xaLog);
@@ -181,12 +180,9 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
 
     public void close(Handler<AsyncResult<Future>> handler) {
         if (inTranscation) {
-            inTranscation = false;
             rollback((Handler<AsyncResult<Future>>) handler);
         } else {
-            inTranscation = false;
-            CompositeFuture compositeFuture = executeAll(sqlConnection -> sqlConnection.close());
-            compositeFuture.onComplete((Handler) handler);
+          clearConnections(event -> handler.handle(Future.succeededFuture()));
         }
     }
 
@@ -202,7 +198,9 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 //记录日志
             }
         });
+        inTranscation = false;
         map.clear();
+        connectionState.clear();
         handler.handle((Future) Future.succeededFuture());
     }
 }
