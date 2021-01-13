@@ -3,8 +3,6 @@ package cn.mycat.vertx.xa;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.sqlclient.Row;
-import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.SqlConnection;
 
 public class LocalXaSqlConnection extends BaseXaSqlConnection {
@@ -34,7 +32,7 @@ public class LocalXaSqlConnection extends BaseXaSqlConnection {
             return;
         }
         if (targetName != null && inTranscation && localSqlConnection != null) {
-            super.commit(()->{
+            super.commitXa(()->{
               return localSqlConnection.query("commit;").execute();
             }, handler);
         } else {
@@ -51,7 +49,7 @@ public class LocalXaSqlConnection extends BaseXaSqlConnection {
                 return sqlConnectionFuture.map(sqlConnection -> {
                     LocalXaSqlConnection.this.localSqlConnection = sqlConnection;
                     return sqlConnection;
-                }).compose(sqlConnection -> sqlConnection.begin().map(sqlConnection));
+                }).compose(sqlConnection -> sqlConnection.query("begin;").execute().map(sqlConnection));
             }
             if (this.targetName != null && this.targetName.equals(targetName)) {
                 return Future.succeededFuture(localSqlConnection);
@@ -73,7 +71,7 @@ public class LocalXaSqlConnection extends BaseXaSqlConnection {
                     if (event.failed()) {
                         //记录日志
                     }
-                    LocalXaSqlConnection.super.rollback(handler);
+                    super.rollback(handler);
                 });
     }
 

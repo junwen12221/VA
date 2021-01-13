@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class LocalSqlConnection extends AbstractXaSqlConnection {
@@ -72,6 +73,17 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
             inTranscation = false;
             //每一个记录日志
             handler.handle((AsyncResult) event);
+        });
+    }
+
+    @Override
+    public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Future>> handler) {
+        beforeCommit.get().onComplete((Handler<AsyncResult>) event -> {
+            if (event.succeeded()){
+                commit(handler);
+            }else {
+                handler.handle(Future.failedFuture(event.cause()));
+            }
         });
     }
 

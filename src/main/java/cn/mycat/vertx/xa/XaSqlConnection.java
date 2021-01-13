@@ -5,6 +5,8 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.sqlclient.SqlConnection;
 
+import java.util.function.Supplier;
+
 public interface XaSqlConnection {
     public static String XA_START = "XA START '%s';";
     public static String XA_END = "XA END '%s';";
@@ -31,7 +33,7 @@ public interface XaSqlConnection {
     public void rollback(Handler<AsyncResult<Future>> handler);
 
     public void commit(Handler<AsyncResult<Future>> handler);
-
+    public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Future>> handler);
     public default void close() {
         close(event -> {
 

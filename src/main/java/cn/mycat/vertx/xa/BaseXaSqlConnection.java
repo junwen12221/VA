@@ -101,10 +101,10 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     }
 
     public void commit(Handler<AsyncResult<Future>> handler) {
-        commit(() -> Future.succeededFuture(), handler);
+        commitXa(() -> Future.succeededFuture(), handler);
     }
 
-    public void commit(Supplier<Future> localFirstCommit, Handler<AsyncResult<Future>> handler) {
+    public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Future>> handler) {
         CompositeFuture xaEnd = executeAll(new Function<SqlConnection, Future>() {
             @Override
             public Future apply(SqlConnection connection) {
@@ -128,16 +128,24 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         xaEnd.onFailure(event14 -> handler.handle(Future.failedFuture(event14)));
         xaEnd.onSuccess(event -> {
             executeAll(connection -> {
-                return connection.query(String.format(XA_PREPARE, xid)).execute();
+                return connection.query(String.format(XA_PREPARE, xid)).execute().map(c -> {
+                    connectionState.put(connection, State.XA_PREPARE);
+                    return connection;
+                });
             })
                     .onFailure(event13 -> {
                         //客户端触发回滚
                         handler.handle(Future.failedFuture(event13));
                     })
                     .onSuccess(event12 -> {
-                        Future future = localFirstCommit.get();
+
+                        Future future = beforeCommit.get();
                         future.onSuccess(event16 -> executeAll(connection -> {
-                            return connection.query(String.format(XA_COMMIT, xid)).execute();
+                            return connection.query(String.format(XA_COMMIT, xid)).execute()
+                                    .map(c -> {
+                                        connectionState.put(connection, State.XA_INIT);
+                                        return connection;
+                                    });
                         })
                                 .onFailure(event15 -> {
                                     inTranscation = false;
