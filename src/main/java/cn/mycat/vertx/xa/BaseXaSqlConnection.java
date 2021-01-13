@@ -128,10 +128,13 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         xaEnd.onFailure(event14 -> handler.handle(Future.failedFuture(event14)));
         xaEnd.onSuccess(event -> {
             executeAll(connection -> {
-                return connection.query(String.format(XA_PREPARE, xid)).execute().map(c -> {
-                    connectionState.put(connection, State.XA_PREPARE);
-                    return connection;
-                });
+                if (connectionState.get(connection) != State.XA_PREPARE) {
+                    return connection.query(String.format(XA_PREPARE, xid)).execute().map(c -> {
+                        connectionState.put(connection, State.XA_PREPARE);
+                        return connection;
+                    });
+                }
+                return Future.succeededFuture();
             })
                     .onFailure(event13 -> {
                         //客户端触发回滚

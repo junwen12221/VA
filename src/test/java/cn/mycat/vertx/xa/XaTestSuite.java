@@ -380,7 +380,66 @@ public abstract class XaTestSuite {
             });
         });
     }
+    @Test
+    public void beginDoubleTargetInsertButCommitFail(VertxTestContext testContext) throws Exception {
+        clearData();
+        XaSqlConnection baseXaSqlConnection =  factory.apply(mySQLManager,xaLog);
+        baseXaSqlConnection.begin(event -> {
+            Assertions.assertTrue(event.succeeded());
+            Future<SqlConnection> ds1 = baseXaSqlConnection.getConnection("ds1");
+            Future<SqlConnection> ds2 = baseXaSqlConnection.getConnection("ds2");
 
+            CompositeFuture all = CompositeFuture.all(ds1.compose(connection -> {
+                Future<RowSet<Row>> future = connection.query(
+                        "INSERT INTO db1.travelrecord (id)\n" +
+                                "                       VALUES\n" +
+                                "                       (1);").execute();
+                return future.compose(rowSet -> {
+                    Assertions.assertEquals(1, rowSet.rowCount());
+                    return Future.succeededFuture(connection);
+                });
+            }), ds2.compose(connection -> {
+                Future<RowSet<Row>> future = connection.query(
+                        "INSERT INTO db1.travelrecord (id)\n" +
+                                "                       VALUES\n" +
+                                "                       (2);").execute();
+                return future.compose(rowSet -> {
+                    Assertions.assertEquals(1, rowSet.rowCount());
+                    return Future.succeededFuture(connection);
+                });
+            }));
+            all.onComplete(event13 -> {
+                Assertions.assertTrue(event13.succeeded());
+                baseXaSqlConnection.commitXa(() -> Future.failedFuture("commit fail"),
+                        new Handler<AsyncResult<Future>>() {
+                            @Override
+                            public void handle(AsyncResult<Future> event) {
+                                Assertions.assertTrue(event.failed());
+                                baseXaSqlConnection.commit(new Handler<AsyncResult<Future>>() {
+                                    @Override
+                                    public void handle(AsyncResult<Future> event) {
+                                        Assertions.assertTrue(event.succeeded());
+
+                                        Assertions.assertFalse(baseXaSqlConnection.isInTranscation());
+                                        Future<SqlConnection> connectionFuture =
+                                                baseXaSqlConnection.getConnection("ds1");
+                                        connectionFuture
+                                                .compose(sqlConnection ->
+                                                        sqlConnection.query("select id from db1.travelrecord").execute())
+                                                .onComplete(event1 -> {
+                                                    Assertions.assertTrue(event1.succeeded());
+                                                    Assertions.assertEquals(1, event1.result().size());
+
+                                                    testContext.completeNow();
+                                                });
+                                    }
+                                });
+                            }
+                        });
+
+            });
+        });
+    }
     private void clearData() throws SQLException {
         try(Connection mySQLConnection = getMySQLConnection(DB2)){
             clearDb(mySQLConnection);
