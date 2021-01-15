@@ -8,6 +8,7 @@ import io.vertx.sqlclient.SqlConnection;
 interface MySQLManager {
 
     Future<SqlConnection> getConnection(String targetName);
-
+    Future<SqlConnection> getConnection(String host,int port);
+    public String getDatasourceName(String host, int port);
     void close(Handler<Future> handler);
 }

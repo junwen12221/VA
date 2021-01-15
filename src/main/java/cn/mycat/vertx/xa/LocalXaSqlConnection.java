@@ -14,7 +14,17 @@ public class LocalXaSqlConnection extends BaseXaSqlConnection {
     }
 
     @Override
-    public void commit(Handler<AsyncResult<Future>> handler) {
+    public void begin(Handler<AsyncResult<Void>> handler) {
+        if (inTranscation) {
+            handler.handle(Future.failedFuture(new IllegalArgumentException("occur Nested transaction")));
+            return;
+        }
+        inTranscation = true;
+        handler.handle(Future.succeededFuture());
+    }
+
+    @Override
+    public void commit(Handler<AsyncResult<Void>> handler) {
         if (targetName == null && localSqlConnection == null && map.isEmpty()) {
             inTranscation = false;
             handler.handle(Future.succeededFuture());
@@ -54,23 +64,22 @@ public class LocalXaSqlConnection extends BaseXaSqlConnection {
             if (this.targetName != null && this.targetName.equals(targetName)) {
                 return Future.succeededFuture(localSqlConnection);
             }
+            xid = log.nextXid();
+            log.beginXa(xid);
             return super.getConnection(targetName);
         }
         return mySQLManager.getConnection(targetName);
     }
 
     @Override
-    public void rollback(Handler<AsyncResult<Future>> handler) {
+    public void rollback(Handler<AsyncResult<Void>> handler) {
         if (targetName == null && localSqlConnection == null && map.isEmpty()) {
             inTranscation = false;
             handler.handle(Future.succeededFuture());
             return;
         }
         localSqlConnection.query("rollback;").execute()
-                .onComplete(event -> {
-                    if (event.failed()) {
-                        //记录日志
-                    }
+                .onComplete(ignored -> {
                     super.rollback(handler);
                 });
     }

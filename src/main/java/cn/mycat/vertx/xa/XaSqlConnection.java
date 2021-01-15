@@ -17,30 +17,23 @@ public interface XaSqlConnection {
     public static String XA_RECOVER = "XA RECOVER;";
     public static String CMD_ALLOC_XID = "ALLOC XID '%s'";
 
-    enum State {
-        XA_INIT,
-        XA_START,
-        XA_END,
-        XA_PREPARE,
-        ;
-    }
 
     public void begin(Handler<AsyncResult<Void>> handler);
 
 
     public Future<SqlConnection> getConnection(String targetName);
 
-    public void rollback(Handler<AsyncResult<Future>> handler);
+    public void rollback(Handler<AsyncResult<Void>> handler);
 
-    public void commit(Handler<AsyncResult<Future>> handler);
-    public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Future>> handler);
+    public void commit(Handler<AsyncResult<Void>> handler);
+    public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Void>> handler);
     public default void close() {
         close(event -> {
 
         });
     }
 
-    public void close(Handler<AsyncResult<Future>> handler);
+    public void close(Handler<AsyncResult<Void>> handler);
 
     public void openStatementState(Handler<AsyncResult<Void>> handler);
 

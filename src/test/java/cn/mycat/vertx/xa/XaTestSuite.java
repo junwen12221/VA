@@ -39,10 +39,9 @@ public abstract class XaTestSuite {
 
 
     public XaTestSuite(MySQLManager mySQLManager,
-                       XaLog xaLog,
                        BiFunction<MySQLManager,XaLog,XaSqlConnection> factory) throws Exception {
         this.mySQLManager = mySQLManager;
-        this.xaLog = xaLog;
+        this.xaLog = XaLogImpl.createDemoRepository(mySQLManager);
         this.factory = factory;
 
         Connection mySQLConnection = getMySQLConnection(DB2);
@@ -84,9 +83,9 @@ public abstract class XaTestSuite {
     @Test
     public void beginCommit(VertxTestContext testContext) {
         XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
-        baseXaSqlConnection.begin(event -> baseXaSqlConnection.commit(new Handler<AsyncResult<Future>>() {
+        baseXaSqlConnection.begin(event -> baseXaSqlConnection.commit(new Handler<AsyncResult<Void>>() {
             @Override
-            public void handle(AsyncResult<Future> event) {
+            public void handle(AsyncResult<Void> event) {
                 Assertions.assertEquals(baseXaSqlConnection.isInTranscation(), false);
                 baseXaSqlConnection.close();
                 testContext.completeNow();
@@ -97,9 +96,9 @@ public abstract class XaTestSuite {
     @Test
     public void beginRollback(VertxTestContext testContext) {
         XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
-        baseXaSqlConnection.begin(event -> baseXaSqlConnection.rollback(new Handler<AsyncResult<Future>>() {
+        baseXaSqlConnection.begin(event -> baseXaSqlConnection.rollback(new Handler<AsyncResult<Void>>() {
             @Override
-            public void handle(AsyncResult<Future> event) {
+            public void handle(AsyncResult<Void> event) {
                 Assertions.assertEquals(baseXaSqlConnection.isInTranscation(), false);
                 baseXaSqlConnection.close();
                 testContext.completeNow();
@@ -125,9 +124,9 @@ public abstract class XaTestSuite {
     @Test
     public void rollback(VertxTestContext testContext) {
         XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
-        baseXaSqlConnection.rollback(new Handler<AsyncResult<Future>>() {
+        baseXaSqlConnection.rollback(new Handler<AsyncResult<Void>>() {
             @Override
-            public void handle(AsyncResult<Future> event) {
+            public void handle(AsyncResult<Void> event) {
                 Assertions.assertTrue(event.succeeded());
                 Assertions.assertFalse(baseXaSqlConnection.isInTranscation());
                 testContext.completeNow();
@@ -138,9 +137,9 @@ public abstract class XaTestSuite {
     @Test
     public void commit(VertxTestContext testContext) {
         XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
-        baseXaSqlConnection.commit(new Handler<AsyncResult<Future>>() {
+        baseXaSqlConnection.commit(new Handler<AsyncResult<Void>>() {
             @Override
-            public void handle(AsyncResult<Future> event) {
+            public void handle(AsyncResult<Void> event) {
                 Assertions.assertTrue(event.succeeded());
                 Assertions.assertFalse(baseXaSqlConnection.isInTranscation());
                 testContext.completeNow();
@@ -151,9 +150,9 @@ public abstract class XaTestSuite {
     @Test
     public void close(VertxTestContext testContext) {
         XaSqlConnection baseXaSqlConnection = factory.apply(mySQLManager,xaLog);
-        baseXaSqlConnection.close(new Handler<AsyncResult<Future>>() {
+        baseXaSqlConnection.close(new Handler<AsyncResult<Void>>() {
             @Override
-            public void handle(AsyncResult<Future> event) {
+            public void handle(AsyncResult<Void> event) {
                 Assertions.assertTrue(event.succeeded());
                 Assertions.assertFalse(baseXaSqlConnection.isInTranscation());
                 testContext.completeNow();
@@ -167,9 +166,9 @@ public abstract class XaTestSuite {
         baseXaSqlConnection.begin(new Handler<AsyncResult<Void>>() {
             @Override
             public void handle(AsyncResult<Void> event) {
-                baseXaSqlConnection.close(new Handler<AsyncResult<Future>>() {
+                baseXaSqlConnection.close(new Handler<AsyncResult<Void>>() {
                     @Override
-                    public void handle(AsyncResult<Future> event) {
+                    public void handle(AsyncResult<Void> event) {
                         Assertions.assertTrue(event.succeeded());
                         Assertions.assertFalse(baseXaSqlConnection.isInTranscation());
                         testContext.completeNow();
@@ -300,9 +299,9 @@ public abstract class XaTestSuite {
             }));
             all.onComplete(event13 -> {
                 Assertions.assertTrue(event13.failed());
-                baseXaSqlConnection.rollback(new Handler<AsyncResult<Future>>() {
+                baseXaSqlConnection.rollback(new Handler<AsyncResult<Void>>() {
                     @Override
-                    public void handle(AsyncResult<Future> event) {
+                    public void handle(AsyncResult<Void> event) {
                         Assertions.assertTrue(event.succeeded());
                         Assertions.assertFalse(baseXaSqlConnection.isInTranscation());
                         Future<SqlConnection> connectionFuture =
@@ -352,13 +351,13 @@ public abstract class XaTestSuite {
             all.onComplete(event13 -> {
                 Assertions.assertTrue(event13.succeeded());
                 baseXaSqlConnection.commitXa(() -> Future.failedFuture("prepare fail"),
-                        new Handler<AsyncResult<Future>>() {
+                        new Handler<AsyncResult<Void>>() {
                     @Override
-                    public void handle(AsyncResult<Future> event) {
+                    public void handle(AsyncResult<Void> event) {
                         Assertions.assertTrue(event.failed());
-                        baseXaSqlConnection.rollback(new Handler<AsyncResult<Future>>() {
+                        baseXaSqlConnection.rollback(new Handler<AsyncResult<Void>>() {
                             @Override
-                            public void handle(AsyncResult<Future> event) {
+                            public void handle(AsyncResult<Void> event) {
                                 Assertions.assertTrue(event.succeeded());
                                 Assertions.assertFalse(baseXaSqlConnection.isInTranscation());
                                 Future<SqlConnection> connectionFuture =
@@ -411,13 +410,13 @@ public abstract class XaTestSuite {
             all.onComplete(event13 -> {
                 Assertions.assertTrue(event13.succeeded());
                 baseXaSqlConnection.commitXa(() -> Future.failedFuture("commit fail"),
-                        new Handler<AsyncResult<Future>>() {
+                        new Handler<AsyncResult<Void>>() {
                             @Override
-                            public void handle(AsyncResult<Future> event) {
+                            public void handle(AsyncResult<Void> event) {
                                 Assertions.assertTrue(event.failed());
-                                baseXaSqlConnection.commit(new Handler<AsyncResult<Future>>() {
+                                baseXaSqlConnection.commit(new Handler<AsyncResult<Void>>() {
                                     @Override
-                                    public void handle(AsyncResult<Future> event) {
+                                    public void handle(AsyncResult<Void> event) {
                                         Assertions.assertTrue(event.succeeded());
 
                                         Assertions.assertFalse(baseXaSqlConnection.isInTranscation());

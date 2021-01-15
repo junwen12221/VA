@@ -20,7 +20,6 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
 
     protected final MySQLManager mySQLManager;
     protected String xid;
-    final static AtomicLong ID = new AtomicLong();
 
     public LocalSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
         super(xaLog);
@@ -34,7 +33,7 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
             return;
         }
         inTranscation = true;
-        xid = ID.getAndIncrement() + "";
+        xid = null;
         handler.handle(Future.succeededFuture());
     }
 
@@ -55,7 +54,7 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
     }
 
     @Override
-    public void rollback(Handler<AsyncResult<Future>> handler) {
+    public void rollback(Handler<AsyncResult<Void>> handler) {
         List<Future> rollback = map.values().stream().map(c -> c.query("rollback").execute()).collect(Collectors.toList());
         CompositeFuture.all(rollback).onComplete(event -> {
             map.clear();
@@ -66,7 +65,7 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
     }
 
     @Override
-    public void commit(Handler<AsyncResult<Future>> handler) {
+    public void commit(Handler<AsyncResult<Void>> handler) {
         List<Future> rollback = map.values().stream().map(c -> c.query("commit").execute()).collect(Collectors.toList());
         CompositeFuture.all(rollback).onComplete(event -> {
             map.clear();
@@ -77,7 +76,7 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
     }
 
     @Override
-    public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Future>> handler) {
+    public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Void>> handler) {
         beforeCommit.get().onComplete((Handler<AsyncResult>) event -> {
             if (event.succeeded()){
                 commit(handler);
@@ -88,7 +87,7 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
     }
 
     @Override
-    public void close(Handler<AsyncResult<Future>> handler) {
+    public void close(Handler<AsyncResult<Void>> handler) {
         inTranscation = false;
         List<Future> rollback = map.values().stream().map(c -> c.close()).collect(Collectors.toList());
         CompositeFuture.all(rollback).onComplete(event -> {
