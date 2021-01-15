@@ -88,9 +88,6 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                                     .map(u -> changeTo(c, State.XA_ENDED));
                         });
                     case XA_ENDED:
-                        future = future.compose(unuse -> c.query(String.format(XA_PREPARE, xid)).execute())
-                                .map(u -> changeTo(c, State.XA_PREPAREED));
-                        ;
                     case XA_PREPAREED:
                         future = future.compose(unuse -> c.query(String.format(XA_ROLLBACK, xid)).execute())
                                 .map(u -> changeTo(c, State.XA_ROLLBACKED));

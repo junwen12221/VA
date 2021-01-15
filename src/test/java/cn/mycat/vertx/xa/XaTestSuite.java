@@ -31,11 +31,11 @@ public abstract class XaTestSuite {
     private final MySQLManager mySQLManager;
     private final XaLog xaLog;
     private final BiFunction<MySQLManager, XaLog, XaSqlConnection> factory;
-    //    MySQLManagerImpl mySQLManager = new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3307)
-//            , demoConfig("ds2", 3306)));
+    //    MySQLManagerImpl mySQLManager = new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3306)
+//            , demoConfig("ds2", 3307)));
 //    XaLogImpl xaLog = new XaLogImpl();
-    String DB1 = System.getProperty("db1", "jdbc:mysql://127.0.0.1:3306/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
-    String DB2 = System.getProperty("db2", "jdbc:mysql://127.0.0.1:3307/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
+    public static  final String DB1 = System.getProperty("db1", "jdbc:mysql://127.0.0.1:3306/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
+    public static  final  String DB2 = System.getProperty("db2", "jdbc:mysql://127.0.0.1:3307/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
 
 
     public XaTestSuite(MySQLManager mySQLManager,
@@ -289,7 +289,7 @@ public abstract class XaTestSuite {
                 });
             }), ds2.compose(connection -> {
                 Future<RowSet<Row>> future = connection.query(
-                        "INSERT INTO db1.travelrecord (id)\n" +
+                        "INSERT INTO  (id)\n" +
                                 "                       VALUES\n" +
                                 "                       (2/0);").execute();
                 return future.compose(rowSet -> {
@@ -467,10 +467,10 @@ public abstract class XaTestSuite {
         return simpleConfig;
     }
 
-    private static Map<String, DruidDataSource> dsMap = new ConcurrentHashMap<>();
+    public static Map<String, DruidDataSource> dsMap = new ConcurrentHashMap<>();
 
 
-    Connection getMySQLConnection(String url) {
+   static Connection getMySQLConnection(String url) {
         try {
             return dsMap.computeIfAbsent(url, new Function<String, DruidDataSource>() {
                 @Override

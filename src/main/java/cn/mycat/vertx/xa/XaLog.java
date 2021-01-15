@@ -2,11 +2,13 @@ package cn.mycat.vertx.xa;
 
 import cn.mycat.vertx.xa.log.ImmutableParticipantLog;
 
-public interface XaLog {
+import java.io.Closeable;
+
+public interface XaLog extends AutoCloseable , Closeable {
     void log(String xid, ImmutableParticipantLog[] participantLogs);
 
     void log(String xid, String target, State state);
-    void logTheImportantCommited(String xid, String target);
+
     String nextXid();
 
     long getTimeout();

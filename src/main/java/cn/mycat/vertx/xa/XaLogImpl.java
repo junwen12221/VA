@@ -1,16 +1,25 @@
 package cn.mycat.vertx.xa;
 
-import cn.mycat.vertx.xa.log.*;
+import cn.mycat.vertx.xa.log.ImmutableCoordinatorLog;
+import cn.mycat.vertx.xa.log.ImmutableParticipantLog;
+import cn.mycat.vertx.xa.log.MemoryRepositoryImpl;
+import cn.mycat.vertx.xa.log.Repository;
 import io.vertx.core.*;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.SqlConnection;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 public class XaLogImpl implements XaLog {
     private final String name;
@@ -30,124 +39,133 @@ public class XaLogImpl implements XaLog {
 
     }
 
-    public static XaLog createDemoRepository(MySQLManager mySQLManager) {
+    public static XaLogImpl createDemoRepository(MySQLManager mySQLManager) {
         return new XaLogImpl(new MemoryRepositoryImpl()
                 , mySQLManager);
     }
 
 
-    private Future<Object> recoverConnection(ImmutableCoordinatorLog entry) {
+    public Future<Object> recoverConnection(ImmutableCoordinatorLog entry) {
         return Future.future(res -> {
-            switch (entry.computeState()) {
-                case XA_INITED:
-                case XA_STARTED:
-                case XA_ENDED: {
-                    rollback(res, entry);
-                    return;
-                }
-                case XA_PREPAREED: {
-                    commit(res, entry);
-                }
-
+            if (entry.mayContains(State.XA_COMMITED)) {
+                commit(res, entry);
+                return;
             }
+
+            Map<String, State> map = new ConcurrentHashMap<>();
+            for (ImmutableParticipantLog participant : entry.getParticipants()) {
+                map.put(participant.getTarget(), participant.getState());
+            }
+            boolean hasCommitted = !entry.mayContains(State.XA_ENDED);
+            List<Future> data = entry.getParticipants().stream().map(i -> {
+                return mySQLManager.getConnection(i.getTarget())
+                        .flatMap(c -> {
+                            Future<RowSet<Row>> execute = c.query((XaSqlConnection.XA_RECOVER)).execute();
+                            return execute.compose(rows -> Future.succeededFuture(StreamSupport.stream(rows.spliterator(), false)
+                                    .map(i1 -> i1.getString("data"))
+                                    .filter(i1 -> i1 != null)
+                                    .filter(i1 -> entry.getXid().equals(i1))
+                                    .findFirst().map(i12 -> State.XA_PREPAREED)
+                                    .orElse(hasCommitted ? State.XA_COMMITED : State.XA_ENDED)))
+                                    .map(now -> {
+                                        map.compute(i.getTarget(), (s, old) -> old.compareTo(now) < 0 ? now : old);
+                                        c.close();
+                                        return now;
+                                    });
+                        });
+            }).collect(Collectors.toList());
+            CompositeFuture.all(data).onComplete(new Handler<AsyncResult<CompositeFuture>>() {
+                @Override
+                public void handle(AsyncResult<CompositeFuture> event) {
+                    ArrayList<ImmutableParticipantLog> participantLogs = new ArrayList<>();
+                    for (Map.Entry<String, State> stringStateEntry : map.entrySet()) {
+                        String key = stringStateEntry.getKey();
+                        State value = stringStateEntry.getValue();
+                        participantLogs.add(new ImmutableParticipantLog(key, getExpires(), value));
+                    }
+
+                    ImmutableCoordinatorLog immutableCoordinatorLog = new ImmutableCoordinatorLog(entry.getXid(), participantLogs.toArray(new ImmutableParticipantLog[]{}));
+                    if (immutableCoordinatorLog.mayContains(State.XA_COMMITED)) {
+                        commit(res, immutableCoordinatorLog);
+                    } else {
+                        rollback(res, immutableCoordinatorLog);
+                    }
+
+                }
+            });
         });
     }
 
     private void commit(Promise<Object> res, ImmutableCoordinatorLog entry) {
+        List<Future> list = new ArrayList<>();
         for (ImmutableParticipantLog participant : entry.getParticipants()) {
-            mySQLManager.getConnection(participant.getTarget())
-                    .onComplete(event -> {
-                        if (event.succeeded()) {
-                            SqlConnection sqlConnection = event.result();
-                            Future<SqlConnection> future = Future.succeededFuture(event.result());
-                            switch (participant.getState()) {
-                                case XA_PREPAREED:
-                                    future = future
-                                            .compose(connection -> connection.query(
-                                                    String.format(XaSqlConnection.XA_COMMIT, entry.getXid())
+            if (participant.getState() == State.XA_PREPAREED) {
+                list.add(mySQLManager.getConnection(participant.getTarget())
+                        .compose(sqlConnection -> {
+                            Future<SqlConnection> future = Future.succeededFuture(sqlConnection);
+                            return future
+                                    .compose(connection -> connection.query(
+                                            String.format(XaSqlConnection.XA_COMMIT, entry.getXid())
 
-                                            ).execute().map(connection));
-                                    break;
-                                case XA_COMMITED:
-                                case XA_ROLLBACKED:
-                            }
-                            future.onSuccess(event1 -> {
-                                sqlConnection.close();
-                                res.complete();
-                            });
-                            future.onFailure(event12 -> {
-                                sqlConnection.close();
-                                res.fail(event12);
-                            });
-                        }
-                    });
-
+                                    ).execute().map(c -> {
+                                        sqlConnection.close();
+                                        log(entry.getXid(), participant.getTarget(), State.XA_COMMITED);
+                                        checkState(entry.getXid(), true, State.XA_COMMITED);
+                                        return null;
+                                    }));
+                        }));
+            } else {
+                list.add(Future.succeededFuture());
+            }
         }
+        CompositeFuture.all(list).onComplete(unused -> {
+            logCommit(entry.getXid(), unused.succeeded());
+            res.complete();
+        });
     }
 
     private void rollback(Promise<Object> res, ImmutableCoordinatorLog entry) {
+        List<Future> list = new ArrayList<>();
         for (ImmutableParticipantLog participant : entry.getParticipants()) {
-            mySQLManager.getConnection(participant.getTarget())
-                    .onComplete(event -> {
-                        if (event.succeeded()) {
-                            SqlConnection sqlConnection = event.result();
-                            Future<SqlConnection> future = Future.succeededFuture(event.result());
-                            switch (participant.getState()) {
-                                case XA_INITED:
-                                    break;
-                                case XA_STARTED:
-                                    future = future
-                                            .compose(connection -> connection.query(
-                                                    String.format(XaSqlConnection.XA_END, entry.getXid())
+            if (participant.getState() == State.XA_PREPAREED || participant.getState() == State.XA_ENDED) {
+                list.add(mySQLManager.getConnection(participant.getTarget())
+                        .compose(sqlConnection -> {
+                            Future<SqlConnection> future = Future.succeededFuture(sqlConnection);
+                            return future
+                                    .compose(connection -> connection.query(
+                                            String.format(XaSqlConnection.XA_ROLLBACK, entry.getXid())
 
-                                            ).execute().map(connection));
-                                case XA_ENDED:
-                                    future = future
-                                            .compose(connection -> connection.query(
-                                                    String.format(XaSqlConnection.XA_PREPARE, entry.getXid())
-
-                                            ).execute().map(connection));
-                                case XA_PREPAREED:
-                                    future = future
-                                            .compose(connection -> connection.query(
-                                                    String.format(XaSqlConnection.XA_ROLLBACK, entry.getXid())
-
-                                            ).execute().map(connection));
-                                    break;
-                                case XA_COMMITED:
-                                case XA_ROLLBACKED:
-                                    return;
-                            }
-                            future.onSuccess(event1 -> {
-                                sqlConnection.close();
-                                res.complete();
-                            });
-                            future.onFailure(event12 -> {
-                                sqlConnection.close();
-                                res.fail(event12);
-                            });
-                        }
-                    });
-
+                                    ).execute().map(c -> {
+                                        log(entry.getXid(), participant.getTarget(), State.XA_ROLLBACKED);
+                                        sqlConnection.close();
+                                        checkState(entry.getXid(), true, State.XA_ROLLBACKED);
+                                        return null;
+                                    }));
+                        }));
+            } else {
+                list.add(Future.succeededFuture());
+            }
+            CompositeFuture.all(list).onComplete(unused -> {
+                logRollback(entry.getXid(), unused.succeeded());
+                res.complete();
+            });
         }
     }
 
-    private void performXARecoveryLog(Handler<AsyncResult<XaLog>> handler) {
+    public void performXARecoveryLog(Handler<AsyncResult<XaLog>> handler) {
         long id = 0;
         char seq = name.charAt(name.length() - 1);
         Collection<ImmutableCoordinatorLog> entries = xaRepository.getAllCoordinatorLogEntries(true);
         for (ImmutableCoordinatorLog entry : entries) {
             String text = entry.getXid();
             xaRepository.put(text, entry);
-            id = Math.max(id, Long.parseLong(text.substring(text.lastIndexOf(seq))));
+            id = Math.max(id, Long.parseLong(text.substring(text.lastIndexOf(seq) + 1)));
         }
         xaIdSeq.set(id);
 
         List<Future> futures = new ArrayList<>();
         for (ImmutableCoordinatorLog entry : entries) {
-            switch (entry.computeState()) {
-                case XA_INITED:
-                case XA_STARTED:
+            switch (entry.computeMinState()) {
                 case XA_ENDED:
                 case XA_PREPAREED: {
                     futures.add(recoverConnection(entry));
@@ -197,7 +215,7 @@ public class XaLogImpl implements XaLog {
         if (xid == null) return;
         synchronized (xaRepository) {
             ImmutableCoordinatorLog immutableCoordinatorLog = new ImmutableCoordinatorLog(xid, participantLogs);
-            xaRepository.put(xid,immutableCoordinatorLog );
+            xaRepository.put(xid, immutableCoordinatorLog);
         }
     }
 
@@ -207,22 +225,18 @@ public class XaLogImpl implements XaLog {
         synchronized (xaRepository) {
             ImmutableCoordinatorLog coordinatorLog = xaRepository.get(xid);
             if (coordinatorLog == null) {
-                log(xid, new ImmutableParticipantLog[]{new ImmutableParticipantLog(xid,
+                log(xid, new ImmutableParticipantLog[]{new ImmutableParticipantLog(target,
                         getExpires(), state)});
             } else {
+                boolean hasCommited = coordinatorLog.mayContains(State.XA_COMMITED);
                 ImmutableParticipantLog[] logs = coordinatorLog.replace(target, state, getExpires());
-                if (state == State.XA_COMMITED){
-                    log(xid,logs);
-                }else {
-                    log(xid,logs);
+                if (state == State.XA_COMMITED && !hasCommited) {
+                    log(xid, logs);
+                } else {
+                    log(xid, logs);
                 }
             }
         }
-    }
-
-    @Override
-    public void logTheImportantCommited(String xid, String target) {
-
     }
 
     @Override
@@ -231,8 +245,8 @@ public class XaLogImpl implements XaLog {
         //only log
         if (!checkState(xid, succeed, State.XA_ROLLBACKED)) {
             LOGGER.error("check logRollback xid:" + xid + " error");
-        }else if (succeed){
-            synchronized (xaRepository){
+        } else if (succeed) {
+            synchronized (xaRepository) {
                 xaRepository.remove(xid);
             }
         }
@@ -252,10 +266,10 @@ public class XaLogImpl implements XaLog {
         ImmutableCoordinatorLog coordinatorLog = xaRepository.get(xid);
 
         if (coordinatorLog != null) {
-            State recordState = coordinatorLog.computeState();
-            s = (succeed == (recordState == state)) || (succeed && recordState == State.XA_COMMITED);
+            State recordState = coordinatorLog.computeMinState();
+            s = (succeed == (recordState == state)) || (succeed && (recordState == State.XA_COMMITED || recordState == State.XA_ROLLBACKED));
         } else {
-            s = false;
+            s = true;
         }
         return s;
     }
@@ -266,8 +280,8 @@ public class XaLogImpl implements XaLog {
         //only log
         if (!checkState(xid, succeed, State.XA_COMMITED)) {
             LOGGER.error("check logCommit xid:" + xid + " error");
-        }else if (succeed){
-            synchronized (xaRepository){
+        } else if (succeed) {
+            synchronized (xaRepository) {
                 xaRepository.remove(xid);
             }
         }
@@ -291,5 +305,12 @@ public class XaLogImpl implements XaLog {
     @Override
     public long getExpires() {
         return getTimeout() + System.currentTimeMillis();
+    }
+
+    @Override
+    public void close() throws IOException {
+        xaRepository.close();
+        mySQLManager.close((h) -> {
+        });
     }
 }

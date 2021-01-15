@@ -47,7 +47,7 @@ public class FileRepositoryImpl implements Repository {
                     public void accept(Path path) {
                         try {
                             ImmutableCoordinatorLog coordinatorLogEntry = Json.decodeValue(new String(Files.readAllBytes(path)), ImmutableCoordinatorLog.class);
-                            switch (coordinatorLogEntry.computeState()) {
+                            switch (coordinatorLogEntry.computeMinState()) {
                                 case XA_COMMITED:
                                 case XA_ROLLBACKED:
                                     Files.delete(path);

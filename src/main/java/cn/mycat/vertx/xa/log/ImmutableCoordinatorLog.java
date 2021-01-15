@@ -26,7 +26,7 @@ public class ImmutableCoordinatorLog implements Serializable {
         return Arrays.asList(participants);
     }
 
-    public State computeState() {
+    public State computeMinState() {
         State txState = State.XA_COMMITED;
         for (ImmutableParticipantLog participant : participants) {
             if (txState == State.XA_INITED) {
@@ -34,11 +34,15 @@ public class ImmutableCoordinatorLog implements Serializable {
             }
             if (txState.compareTo(participant.getState()) > 0) {
                 txState = participant.getState();
-
             }
         }
         return txState;
     }
+
+    public boolean mayContains(State state) {
+        return Arrays.stream(participants).anyMatch(immutableParticipantLog -> state ==  immutableParticipantLog.getState());
+    }
+
     public ImmutableParticipantLog[] replace(String target, State state, long expires) {
         ArrayList<ImmutableParticipantLog> res = new ArrayList<>();
         boolean find = false;

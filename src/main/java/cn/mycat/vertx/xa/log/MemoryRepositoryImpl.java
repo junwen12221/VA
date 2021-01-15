@@ -58,7 +58,7 @@ public class MemoryRepositoryImpl implements Repository {
         try {
             ImmutableCoordinatorLog coordinatorLogEntry = storage.get(id);
             if (coordinatorLogEntry != null) {
-                switch (coordinatorLogEntry.computeState()) {
+                switch (coordinatorLogEntry.computeMinState()) {
                     case XA_COMMITED:
                     case XA_ROLLBACKED:
                         storage.remove(id);
