@@ -308,6 +308,11 @@ public class XaLogImpl implements XaLog {
     }
 
     @Override
+    public long retryDelay() {
+        return xaRepository.retryDelay();
+    }
+
+    @Override
     public void close() throws IOException {
         xaRepository.close();
         mySQLManager.close((h) -> {

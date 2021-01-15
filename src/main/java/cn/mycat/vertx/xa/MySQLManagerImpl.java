@@ -3,6 +3,7 @@ package cn.mycat.vertx.xa;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.mysqlclient.MySQLAuthenticationPlugin;
 import io.vertx.mysqlclient.MySQLConnectOptions;
 import io.vertx.mysqlclient.MySQLPool;
@@ -60,5 +61,10 @@ public class MySQLManagerImpl implements MySQLManager {
     public void close(Handler<Future> handler) {
         CompositeFuture.all(nameMap.values().stream().map(i -> i.close()).collect(Collectors.toList()))
                 .onComplete(event -> handler.handle(event.result()));
+    }
+
+    @Override
+    public Vertx getVertx() {
+        return Vertx.currentContext().owner();
     }
 }

@@ -24,4 +24,6 @@ public interface XaLog extends AutoCloseable , Closeable {
     void beginXa(String xid);
 
     long getExpires();
+
+    long retryDelay();
 }

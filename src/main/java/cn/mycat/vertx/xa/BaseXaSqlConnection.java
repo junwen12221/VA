@@ -95,25 +95,26 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 return future;
             }
         };
-        executeAll((Function)function)
+        executeAll((Function) function)
                 .onComplete(event -> {
                     log.logRollback(xid, event.succeeded());
-                    if (event.succeeded()){
+                    if (event.succeeded()) {
                         inTranscation = false;
                         clearConnections((Handler) handler);
-                    }else {
-                        retryRollback(handler,function);
+                    } else {
+                        retryRollback(handler, function);
                     }
                 });
     }
 
     private void retryRollback(Handler<AsyncResult<Void>> handler, Function<SqlConnection, Future<Object>> function) {
+
         List<Future<Object>> collect = computePrepareRollbackTargets().stream().map(c -> mySQLManager.getConnection(c).flatMap(function)).collect(Collectors.toList());
-        CompositeFuture.all((List)collect)
+        CompositeFuture.all((List) collect)
                 .onComplete(event -> {
                     log.logRollback(xid, event.succeeded());
-                    if (event.failed()){
-                        retryRollback(handler, function);
+                    if (event.failed()) {
+                        mySQLManager.getVertx().setTimer(log.retryDelay(), event1 -> retryRollback(handler, function));
                         return;
                     }
                     inTranscation = false;
@@ -237,10 +238,12 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                         })).collect(Collectors.toList()));
         all.onSuccess(event -> {
             inTranscation = false;
-            log.logCommit(xid,true);
+            log.logCommit(xid, true);
             clearConnections(event2 -> handler.handle(Future.succeededFuture()));
         });
-        all.onFailure(event -> retryCommit(handler));
+        all.onFailure(event -> {
+            mySQLManager.getVertx().setTimer(log.retryDelay(), event1 -> retryCommit(handler));
+        });
     }
 
     private List<String> computePrepareCommittedTargets() {
@@ -250,6 +253,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 .map(k -> getTarget(k)).collect(Collectors.toList());
         return collect;
     }
+
     private List<String> computePrepareRollbackTargets() {
         List<String> collect = connectionState.entrySet().stream()
                 .filter(i -> i.getValue() != State.XA_ROLLBACKED)
@@ -257,6 +261,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 .map(k -> getTarget(k)).collect(Collectors.toList());
         return collect;
     }
+
     public CompositeFuture executeAll(Function<SqlConnection, Future> connectionFutureFunction) {
         if (map.isEmpty()) {
             return CompositeFuture.any(Future.succeededFuture(), Future.succeededFuture());

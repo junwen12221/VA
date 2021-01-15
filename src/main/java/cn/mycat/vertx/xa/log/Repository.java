@@ -10,6 +10,10 @@ public interface Repository {
         return TimeUnit.SECONDS.toMillis(30);
     }
 
+    default long retryDelay() {
+        return TimeUnit.SECONDS.toMillis(3);
+    }
+
     void init();
 
     void put(String id, ImmutableCoordinatorLog coordinatorLog);
