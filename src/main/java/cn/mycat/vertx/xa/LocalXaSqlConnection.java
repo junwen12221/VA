@@ -95,4 +95,14 @@ public class LocalXaSqlConnection extends BaseXaSqlConnection {
         }
         super.closeStatementState(handler);
     }
+
+    @Override
+    public void close(Handler<AsyncResult<Void>> handler) {
+        if (localSqlConnection!=null){
+            localSqlConnection.query("rollback").execute().onComplete(c->localSqlConnection.close());
+            localSqlConnection = null;
+            targetName = null;
+        }
+        super.close(handler);
+    }
 }
