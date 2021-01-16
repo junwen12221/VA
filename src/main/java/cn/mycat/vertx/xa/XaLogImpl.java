@@ -164,7 +164,9 @@ public class XaLogImpl implements XaLog {
         xaIdSeq.set(id);
 
         List<Future> futures = new ArrayList<>();
-        for (ImmutableCoordinatorLog entry : entries) {
+        for (ImmutableCoordinatorLog entry : entries.stream()
+                .filter(p -> p.computeExpires() > System.currentTimeMillis())
+                .collect(Collectors.toList())) {
             switch (entry.computeMinState()) {
                 case XA_ENDED:
                 case XA_PREPAREED: {
@@ -179,14 +181,16 @@ public class XaLogImpl implements XaLog {
         }
         CompositeFuture.all(futures).onComplete(event -> {
             if (event.succeeded()) {
-                handler.handle((AsyncResult) event);
+                handler.handle(Future.succeededFuture());
                 return;
             }
             CompositeFuture result = event.result();
-            int size = result.size();
-            for (int i = 0; i < size; i++) {
-                Throwable cause = result.cause(i);
-                System.out.println(cause);
+            if (result!=null){
+                int size = result.size();
+                for (int i = 0; i < size; i++) {
+                    Throwable cause = result.cause(i);
+                    System.out.println(cause);
+                }
             }
             handler.handle((AsyncResult) event);
             return;

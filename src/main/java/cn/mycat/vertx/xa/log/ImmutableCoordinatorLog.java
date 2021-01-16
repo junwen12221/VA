@@ -59,4 +59,8 @@ public class ImmutableCoordinatorLog implements Serializable {
         }
         return res.toArray(new ImmutableParticipantLog[]{});
     }
+
+    public long computeExpires(){
+       return Arrays.stream(participants).mapToLong(i->i.getExpires()).max().orElse(0);
+    }
 }
