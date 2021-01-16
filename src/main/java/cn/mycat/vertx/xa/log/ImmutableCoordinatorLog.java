@@ -12,10 +12,15 @@ public class ImmutableCoordinatorLog implements Serializable {
 
     private final String xid;
     private final ImmutableParticipantLog[] participants;
+    private final boolean commit;
 
-    public ImmutableCoordinatorLog(String coordinatorId, ImmutableParticipantLog[] participants) {
+    public ImmutableCoordinatorLog(String coordinatorId, ImmutableParticipantLog[] participants,boolean commit) {
         this.xid = coordinatorId;
         this.participants = participants;
+        this.commit = commit;
+    }
+    public ImmutableCoordinatorLog(String coordinatorId, ImmutableParticipantLog[] participants) {
+      this(coordinatorId,participants,false);
     }
 
     public String getXid() {
@@ -62,5 +67,9 @@ public class ImmutableCoordinatorLog implements Serializable {
 
     public long computeExpires(){
        return Arrays.stream(participants).mapToLong(i->i.getExpires()).max().orElse(0);
+    }
+
+    public ImmutableCoordinatorLog withCommited(boolean success){
+        return new ImmutableCoordinatorLog(xid,getParticipants().toArray(new ImmutableParticipantLog[0]),success);
     }
 }

@@ -185,7 +185,7 @@ public class XaLogImpl implements XaLog {
                 return;
             }
             CompositeFuture result = event.result();
-            if (result!=null){
+            if (result != null) {
                 int size = result.size();
                 for (int i = 0; i < size; i++) {
                     Throwable cause = result.cause(i);
@@ -292,11 +292,24 @@ public class XaLogImpl implements XaLog {
     }
 
     @Override
-    public void logLocalCommitOnBeforeXaCommit(String xid, boolean succeed) {
+    public void logCommitBeforeXaCommit(String xid) {
         if (xid == null) return;
         //only log
-        if (!checkState(xid, succeed, State.XA_PREPAREED)) {
-            LOGGER.error("check logLocalCommitOnBeforeXaCommit xid:" + xid + " error");
+
+        synchronized (xaRepository) {
+            ImmutableCoordinatorLog immutableCoordinatorLog = xaRepository.get(xid);
+            immutableCoordinatorLog.withCommited(true);
+            xaRepository.writeCommitedLog(immutableCoordinatorLog);
+        }
+    }
+
+
+    @Override
+    public void logCancelLocalCommitBeforeXaCommit(String xid) {
+        if (xid == null) return;
+        //only log
+        synchronized (xaRepository) {
+            xaRepository.cancelCommitedLog(xid);
         }
     }
 

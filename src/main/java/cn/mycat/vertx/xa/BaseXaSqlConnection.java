@@ -187,11 +187,19 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                     })
                     .onSuccess(event12 -> {
                         log.logPrepare(xid, true);
-                        Future future = beforeCommit.get();
+                        Future future;
+                        try {
+                            log.logCommitBeforeXaCommit(xid);
+                            future= beforeCommit.get();
+                        }catch (Throwable throwable){
+                            future = Future.failedFuture(throwable);
+                        }
+                        future.onFailure((Handler<Throwable>) event17 -> {
+                            log.logCancelLocalCommitBeforeXaCommit(xid);
+                            //客户端触发回滚
+                            handler.handle(Future.failedFuture(event17));
+                        });
                         future.onSuccess(event16 -> {
-                            if (future != Future.succeededFuture()) {
-                                log.logLocalCommitOnBeforeXaCommit(xid, true);
-                            }
                             executeAll(connection -> {
                                 return connection.query(String.format(XA_COMMIT, xid)).execute()
                                         .map(c -> changeTo(connection, State.XA_COMMITED));
@@ -207,17 +215,6 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                                         clearConnections(event2 -> handler.handle(((AsyncResult) event1)));
                                     });
                         });
-                        future.onFailure(new Handler<Throwable>() {
-                            @Override
-                            public void handle(Throwable event) {
-                                if (future != Future.succeededFuture()) {
-                                    log.logLocalCommitOnBeforeXaCommit(xid, false);
-                                }
-                                //客户端触发回滚
-                                handler.handle(Future.failedFuture(event));
-                            }
-                        });
-
                     });
         });
     }

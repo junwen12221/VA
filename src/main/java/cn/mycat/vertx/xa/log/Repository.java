@@ -26,4 +26,12 @@ public interface Repository {
 
     void close();
 
+   default void writeCommitedLog(ImmutableCoordinatorLog immutableCoordinatorLog){
+        put(immutableCoordinatorLog.getXid(),immutableCoordinatorLog);
+    }
+    default void cancelCommitedLog(String xid){
+        ImmutableCoordinatorLog immutableCoordinatorLog = get(xid);
+        immutableCoordinatorLog.withCommited(false);
+        put(xid,immutableCoordinatorLog);
+    }
 }
