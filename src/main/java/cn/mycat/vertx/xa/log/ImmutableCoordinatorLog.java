@@ -45,6 +45,9 @@ public class ImmutableCoordinatorLog implements Serializable {
     }
 
     public boolean mayContains(State state) {
+        if (commit){
+            return State.XA_COMMITED == state;
+        }
         return Arrays.stream(participants).anyMatch(immutableParticipantLog -> state ==  immutableParticipantLog.getState());
     }
 
