@@ -24,26 +24,26 @@ import java.io.Closeable;
 public interface XaLog extends AutoCloseable, Closeable {
 
     /**
-     * xid
-     * @return
+     *
+     * @return xid
      */
     String nextXid();
 
     /**
-     * Transcation timeout;
-     * @return
+     *
+     * @return transcation timeout;
      */
     long getTimeout();
 
     /**
-     * getTimeout+now;
-     * @return
+     *
+     * @return getTimeout+now;
      */
     long getExpires();
 
     /**
-     * time of rollback or commit retry delay
-     * @return
+     *
+     * @return time of rollback or commit retry delay
      */
     long retryDelay();
 
@@ -58,27 +58,27 @@ public interface XaLog extends AutoCloseable, Closeable {
 
     /**
      * all participants ared prepared.only for check.
-     * @param xid
-     * @param succeed
+     * @param xid xid
+     * @param succeed the prepare is successful or not
      */
     void logPrepare(String xid, boolean succeed);
 
     /**
-     * all participants ared commited.only for check.
-     * @param xid
-     * @param succeed
+     * all participants are commited.only for check.
+     * @param xid xid
+     * @param succeed the commit is successful or not
      */
     void logCommit(String xid, boolean succeed);
 
     /**
      * Need distributed order, persistence.for recover.
-     * @param xid
+     * @param xid xid
      */
     void logCommitBeforeXaCommit(String xid);
 
     /**
      * Need distributed order, persistence.for recover.
-     * @param xid
+     * @param xid xid
      */
     void logCancelCommitBeforeXaCommit(String xid);
 

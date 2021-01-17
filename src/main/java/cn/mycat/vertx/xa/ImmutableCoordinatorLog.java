@@ -50,9 +50,9 @@ public class ImmutableCoordinatorLog implements Serializable {
     }
 
     /**
-     * the min state for subsequent xa command to commit or rollback
      *
-     * @return
+     *
+     * @return  the min state for subsequent xa command to commit or rollback
      */
     public State computeMinState() {
         State txState = State.XA_COMMITED;
@@ -75,12 +75,12 @@ public class ImmutableCoordinatorLog implements Serializable {
     }
 
     /**
-     * the received xa state + local commit flag log
+     *
      * local commit flag log means all participants has prepared but not commited
      * if Coordinator keep not occurs broken and received the response,it is Strong consistency.
      *
-     * @param state
-     * @return
+     * @param state check state
+     * @return the received xa state + local commit flag log
      */
     public boolean mayContains(State state) {
         if (commitMarked) {

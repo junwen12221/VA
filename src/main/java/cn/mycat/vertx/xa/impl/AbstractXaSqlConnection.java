@@ -45,7 +45,7 @@ public abstract class AbstractXaSqlConnection implements XaSqlConnection {
 
     /**
      *  a sql runs before call it,if autocommit = false,it should begin a transcation.
-     * @param handler
+     * @param handler the callback handler
      */
     @Override
     public void openStatementState(Handler<AsyncResult<Void>> handler) {
