@@ -12,8 +12,13 @@ VA ,MySQL Client XA Transcation Tools Based on Vertx.(incubate)
 
 [doc](https://github.com/junwen12221/VA/wiki)
 
+If you have any questions, please leave a message in issues.
+The project is under development and the API will change.
+
+qq:294712221
+
 
 
 ###### License
 
-GNU GENERAL PUBLIC LICENSE
+Apache License
