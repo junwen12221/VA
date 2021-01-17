@@ -1,3 +1,18 @@
+/**
+ * Copyright [2021] [chen junwen]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package cn.mycat.vertx.xa;
 
 import cn.mycat.vertx.xa.log.ImmutableParticipantLog;
@@ -88,7 +103,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                                     .map(u -> changeTo(c, State.XA_ENDED));
                         });
                     case XA_ENDED:
-                    case XA_PREPAREED:
+                    case XA_PREPARED:
                         future = future.compose(unuse -> c.query(String.format(XA_ROLLBACK, xid)).execute())
                                 .map(u -> changeTo(c, State.XA_ROLLBACKED));
                 }
@@ -174,9 +189,9 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         xaEnd.onFailure(event14 -> handler.handle(Future.failedFuture(event14)));
         xaEnd.onSuccess(event -> {
             executeAll(connection -> {
-                if (connectionState.get(connection) != State.XA_PREPAREED) {
+                if (connectionState.get(connection) != State.XA_PREPARED) {
                     return connection.query(String.format(XA_PREPARE, xid)).execute()
-                            .map(c -> changeTo(connection, State.XA_PREPAREED));
+                            .map(c -> changeTo(connection, State.XA_PREPARED));
                 }
                 return Future.succeededFuture();
             })

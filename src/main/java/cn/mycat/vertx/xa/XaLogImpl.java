@@ -1,3 +1,19 @@
+/**
+ * Copyright [2021] [chen junwen]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package cn.mycat.vertx.xa;
 
 import cn.mycat.vertx.xa.log.ImmutableCoordinatorLog;
@@ -65,7 +81,7 @@ public class XaLogImpl implements XaLog {
                                     .map(i1 -> i1.getString("data"))
                                     .filter(i1 -> i1 != null)
                                     .filter(i1 -> entry.getXid().equals(i1))
-                                    .findFirst().map(i12 -> State.XA_PREPAREED)
+                                    .findFirst().map(i12 -> State.XA_PREPARED)
                                     .orElse(hasCommitted ? State.XA_COMMITED : State.XA_ENDED)))
                                     .map(now -> {
                                         map.compute(i.getTarget(), (s, old) -> old.compareTo(now) < 0 ? now : old);
@@ -99,7 +115,7 @@ public class XaLogImpl implements XaLog {
     private void commit(Promise<Object> res, ImmutableCoordinatorLog entry) {
         List<Future> list = new ArrayList<>();
         for (ImmutableParticipantLog participant : entry.getParticipants()) {
-            if (participant.getState() == State.XA_PREPAREED) {
+            if (participant.getState() == State.XA_PREPARED) {
                 list.add(mySQLManager.getConnection(participant.getTarget())
                         .compose(sqlConnection -> {
                             Future<SqlConnection> future = Future.succeededFuture(sqlConnection);
@@ -127,7 +143,7 @@ public class XaLogImpl implements XaLog {
     private void rollback(Promise<Object> res, ImmutableCoordinatorLog entry) {
         List<Future> list = new ArrayList<>();
         for (ImmutableParticipantLog participant : entry.getParticipants()) {
-            if (participant.getState() == State.XA_PREPAREED || participant.getState() == State.XA_ENDED) {
+            if (participant.getState() == State.XA_PREPARED || participant.getState() == State.XA_ENDED) {
                 list.add(mySQLManager.getConnection(participant.getTarget())
                         .compose(sqlConnection -> {
                             Future<SqlConnection> future = Future.succeededFuture(sqlConnection);
@@ -155,7 +171,7 @@ public class XaLogImpl implements XaLog {
     public void performXARecoveryLog(Handler<AsyncResult<XaLog>> handler) {
         long id = 0;
         char seq = name.charAt(name.length() - 1);
-        Collection<ImmutableCoordinatorLog> entries = xaRepository.getAllCoordinatorLogEntries(true);
+        Collection<ImmutableCoordinatorLog> entries = xaRepository.getCoordinatorLogs();
         for (ImmutableCoordinatorLog entry : entries) {
             String text = entry.getXid();
             xaRepository.put(text, entry);
@@ -169,7 +185,7 @@ public class XaLogImpl implements XaLog {
                 .collect(Collectors.toList())) {
             switch (entry.computeMinState()) {
                 case XA_ENDED:
-                case XA_PREPAREED: {
+                case XA_PREPARED: {
                     futures.add(recoverConnection(entry));
                     break;
                 }
@@ -260,7 +276,7 @@ public class XaLogImpl implements XaLog {
     public void logPrepare(String xid, boolean succeed) {
         if (xid == null) return;
         //only log
-        if (!checkState(xid, succeed, State.XA_PREPAREED)) {
+        if (!checkState(xid, succeed, State.XA_PREPARED)) {
             LOGGER.error("check logPrepare xid:" + xid + " error");
         }
     }

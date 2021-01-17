@@ -1,3 +1,19 @@
+/**
+ * Copyright [2021] [chen junwen]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package cn.mycat.vertx.xa;
 
 import com.alibaba.druid.pool.DruidDataSource;
@@ -31,9 +47,6 @@ public abstract class XaTestSuite {
     private final MySQLManager mySQLManager;
     private final XaLog xaLog;
     private final BiFunction<MySQLManager, XaLog, XaSqlConnection> factory;
-    //    MySQLManagerImpl mySQLManager = new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3306)
-//            , demoConfig("ds2", 3307)));
-//    XaLogImpl xaLog = new XaLogImpl();
     public static  final String DB1 = System.getProperty("db1", "jdbc:mysql://127.0.0.1:3306/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
     public static  final  String DB2 = System.getProperty("db2", "jdbc:mysql://127.0.0.1:3307/mysql?username=root&password=123456&characterEncoding=utf8&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
 
