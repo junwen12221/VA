@@ -31,4 +31,4 @@ jobs:
           mysql root password: 123456
       - name: test
         run: |
-          mvn -B test -Dmaven.test.skip=true
+          mvn -B test
