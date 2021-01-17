@@ -7,6 +7,10 @@
     <groupId>com.github.junwen12221</groupId>
     <artifactId>va</artifactId>
     <version>0.01</version>
+    <name>va</name>
+    <description>MySQL Client XA Transcation Tools Based on Vertx</description>
+    <url>https://github.com/junwen12221/VA.git</url>
+
     <build>
         <plugins>
             <plugin>
