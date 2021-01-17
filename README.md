@@ -17,7 +17,14 @@ The project is under development and the API will change.
 
 qq:294712221
 
+```
+<dependency>
+  <groupId>com.github.junwen12221</groupId>
+  <artifactId>va</artifactId>
+  <version>0.01</version>
+</dependency>
 
+```
 
 ###### License
 
