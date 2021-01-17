@@ -22,8 +22,8 @@ import java.util.concurrent.TimeUnit;
 public interface Repository {
 
     /**
-     * transcation timeout config;
-     * @return
+     *
+     * @return transcation timeout config;
      */
     default long getTimeout() {
         return TimeUnit.SECONDS.toMillis(30);
@@ -37,8 +37,8 @@ public interface Repository {
 
     /**
      * save log
-     * @param xid
-     * @param coordinatorLog
+     * @param xid xid
+     * @param coordinatorLog CoordinatorLog
      */
     void put(String xid, ImmutableCoordinatorLog coordinatorLog);
 
@@ -47,8 +47,8 @@ public interface Repository {
     ImmutableCoordinatorLog get(String xid);
 
     /**
-     * get all saved log
-     * @return
+     *
+     * @return get all saved log
      */
     Collection<ImmutableCoordinatorLog> getCoordinatorLogs();
 
@@ -56,15 +56,15 @@ public interface Repository {
 
     /**
      *  Atomic, persistent ,write the Confirm ready to commit flag log
-     * @param immutableCoordinatorLog
+     * @param coordinatorLog coordinatorLog
      */
-    default void writeCommitLog(ImmutableCoordinatorLog immutableCoordinatorLog) {
-        put(immutableCoordinatorLog.getXid(), immutableCoordinatorLog);
+    default void writeCommitLog(ImmutableCoordinatorLog coordinatorLog) {
+        put(coordinatorLog.getXid(), coordinatorLog);
     }
 
     /**
      *  Atomic, persistent ,write the cancel the commit flag log
-     * @param xid
+     * @param xid xid
      */
     default void cancelCommitLog(String xid) {
         ImmutableCoordinatorLog immutableCoordinatorLog = get(xid);

@@ -102,14 +102,15 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     }
 
     /**
-     * XA_START->XA_END->XA_ROLLBACK
+     *
      * <p>
-     * XA_ENDED->XA_ROLLBACK
-     * XA_PREPARED->XA_ROLLBACK
+     * XA_START to XA_END to XA_ROLLBACK
+     * XA_ENDED to XA_ROLLBACK
+     * XA_PREPARED to XA_ROLLBACK
      * <p>
      * client blocks until rollback successfully
      *
-     * @param handler
+     * @param handler the callback handler
      */
     public void rollback(Handler<AsyncResult<Void>> handler) {
         logParticipants();
@@ -198,7 +199,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
 
     /**
      * @param beforeCommit for the native connection commit or some exception test
-     * @param handler
+     * @param handler the callback handler
      */
     public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Void>> handler) {
         logParticipants();
@@ -336,7 +337,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
     }
 
     /**
-     * @param handler
+     * @param handler close and call handler
      */
     public void close(Handler<AsyncResult<Void>> handler) {
         if (inTranscation) {

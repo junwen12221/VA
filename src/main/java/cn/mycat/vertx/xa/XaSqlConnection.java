@@ -44,7 +44,7 @@ public interface XaSqlConnection {
 
     /**inner interface
      * @param beforeCommit for the native connection commit or some exception test
-     * @param handler
+     * @param handler the callback handler
      */
     public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Void>> handler);
 
@@ -58,13 +58,13 @@ public interface XaSqlConnection {
 
     /**
      * a sql runs before call it;
-     * @param handler
+     * @param handler the callbackhandler
      */
     public void openStatementState(Handler<AsyncResult<Void>> handler);
 
     /**
      * a sql runs after call it;
-     * @param handler
+     * @param handler the callback handler
      */
     public void closeStatementState(Handler<AsyncResult<Void>> handler);
 
