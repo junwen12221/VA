@@ -21,4 +21,4 @@ qq:294712221
 
 ###### License
 
-GNU GENERAL PUBLIC LICENSE
+Apache License
