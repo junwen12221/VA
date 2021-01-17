@@ -13,12 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package cn.mycat.vertx.xa;
+package cn.mycat.vertx.xa.impl;
 
+import cn.mycat.vertx.xa.MySQLManager;
+import cn.mycat.vertx.xa.SimpleConfig;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.mysqlclient.MySQLAuthenticationPlugin;
 import io.vertx.mysqlclient.MySQLConnectOptions;
 import io.vertx.mysqlclient.MySQLPool;
@@ -31,8 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class MySQLManagerImpl implements MySQLManager {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MySQLManagerImpl.class);
     private final ConcurrentHashMap<String, MySQLPool> nameMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, String> hostMap = new ConcurrentHashMap<>();
 
     public MySQLManagerImpl(List<SimpleConfig> configList) {
         Objects.requireNonNull(configList);
@@ -40,7 +44,6 @@ public class MySQLManagerImpl implements MySQLManager {
             String name = simpleConfig.getName();
             MySQLPool pool = getMySQLPool(simpleConfig.getPort(), simpleConfig.getHost(), simpleConfig.getDatabase(), simpleConfig.getUser(), simpleConfig.getPassword(), simpleConfig.getMaxSize());
             nameMap.put(name, pool);
-            hostMap.put(simpleConfig.getHost() + ":" + simpleConfig.getPort(), name);
         }
     }
 
@@ -61,10 +64,6 @@ public class MySQLManagerImpl implements MySQLManager {
     @Override
     public Future<SqlConnection> getConnection(String targetName) {
         return nameMap.get(targetName).getConnection();
-    }
-
-    public String getDatasourceName(String host, int port) {
-        return hostMap.get(host + ":" + port);
     }
 
     @Override

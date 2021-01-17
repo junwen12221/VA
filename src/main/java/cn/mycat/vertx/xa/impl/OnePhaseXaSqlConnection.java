@@ -14,16 +14,22 @@
  * limitations under the License.
  */
 
-package cn.mycat.vertx.xa;
+package cn.mycat.vertx.xa.impl;
 
+import cn.mycat.vertx.xa.MySQLManager;
+import cn.mycat.vertx.xa.State;
+import cn.mycat.vertx.xa.XaLog;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.sqlclient.SqlConnection;
 
 public class OnePhaseXaSqlConnection extends BaseXaSqlConnection {
-    public OnePhaseXaSqlConnection(MySQLManager mySQLManager,XaLog xaLog) {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OnePhaseXaSqlConnection.class);
+    public OnePhaseXaSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
         super(mySQLManager,xaLog);
     }
 
@@ -37,7 +43,7 @@ public class OnePhaseXaSqlConnection extends BaseXaSqlConnection {
                 handler.handle(Future.failedFuture(event14));
             });
             xaEnd.onSuccess(event -> {
-                changeTo(sqlConnection,State.XA_ENDED);
+                changeTo(sqlConnection, State.XA_ENDED);
                 executeAll(connection -> {
                     return connection.query(String.format(XA_COMMIT_ONE_PHASE, xid)).execute();
                 }).onComplete(new Handler<AsyncResult<CompositeFuture>>() {

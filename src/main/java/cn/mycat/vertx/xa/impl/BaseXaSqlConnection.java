@@ -1,25 +1,31 @@
 /**
  * Copyright [2021] [chen junwen]
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package cn.mycat.vertx.xa;
+package cn.mycat.vertx.xa.impl;
 
-import cn.mycat.vertx.xa.log.ImmutableParticipantLog;
+import cn.mycat.vertx.xa.ImmutableParticipantLog;
+import cn.mycat.vertx.xa.MySQLManager;
+import cn.mycat.vertx.xa.State;
+import cn.mycat.vertx.xa.XaLog;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.mysqlclient.MySQLConnection;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.SqlConnection;
@@ -35,16 +41,12 @@ import java.util.stream.Collectors;
 
 
 public class BaseXaSqlConnection extends AbstractXaSqlConnection {
+    private final static Logger LOGGER = LoggerFactory.getLogger(BaseXaSqlConnection.class);
     protected final ConcurrentHashMap<String, SqlConnection> map = new ConcurrentHashMap<>();
     protected final Map<SqlConnection, State> connectionState = Collections.synchronizedMap(new IdentityHashMap<>());
     protected final MySQLManager mySQLManager;
-    protected String xid;
+    protected volatile String xid;
 
-    private String getTarget(SqlConnection connection) {
-        return map.entrySet().stream().filter(p -> p.getValue() == connection).map(e -> e.getKey())
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("unknown connection " + connection));
-    }
 
     public BaseXaSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
         super(xaLog);
@@ -57,7 +59,18 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         this.mySQLManager = mySQLManager;
     }
 
+    private String getDatasourceName(SqlConnection connection) {
+        return map.entrySet().stream().filter(p -> p.getValue() == connection).map(e -> e.getKey())
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown connection " + connection));
+    }
 
+    /**
+     * 1.not allow Nested transaction,double begin.
+     * 2.alloc unique xid
+     *
+     * @param handler
+     */
     public void begin(Handler<AsyncResult<Void>> handler) {
         if (inTranscation) {
             handler.handle(Future.failedFuture(new IllegalArgumentException("occur Nested transaction")));
@@ -88,6 +101,16 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         return mySQLManager.getConnection(targetName);
     }
 
+    /**
+     * XA_START->XA_END->XA_ROLLBACK
+     * <p>
+     * XA_ENDED->XA_ROLLBACK
+     * XA_PREPARED->XA_ROLLBACK
+     * <p>
+     * client blocks until rollback successfully
+     *
+     * @param handler
+     */
     public void rollback(Handler<AsyncResult<Void>> handler) {
         logParticipants();
         Function<SqlConnection, Future<Object>> function = new Function<SqlConnection, Future<Object>>() {
@@ -122,6 +145,12 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 });
     }
 
+    /**
+     * retry has a delay time for datasource need duration to recover
+     *
+     * @param handler
+     * @param function
+     */
     private void retryRollback(Handler<AsyncResult<Void>> handler, Function<SqlConnection, Future<Object>> function) {
 
         List<Future<Object>> collect = computePrepareRollbackTargets().stream().map(c -> mySQLManager.getConnection(c).flatMap(function)).collect(Collectors.toList());
@@ -137,6 +166,9 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 });
     }
 
+    /**
+     * before XA_PREPARE,should log the participants
+     */
     private void logParticipants() {
         ImmutableParticipantLog[] participantLogs = new ImmutableParticipantLog[map.size()];
         int index = 0;
@@ -151,7 +183,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
 
     protected SqlConnection changeTo(SqlConnection c, State state) {
         connectionState.put(c, state);
-        log.log(xid, getTarget(c), state);
+        log.log(xid, getDatasourceName(c), state);
         return c;
     }
 
@@ -164,6 +196,10 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         commitXa(() -> Future.succeededFuture(), handler);
     }
 
+    /**
+     * @param beforeCommit for the native connection commit or some exception test
+     * @param handler
+     */
     public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Void>> handler) {
         logParticipants();
         CompositeFuture xaEnd = executeAll(new Function<SqlConnection, Future>() {
@@ -186,7 +222,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
             }
 
         });
-        xaEnd.onFailure(event14 -> handler.handle(Future.failedFuture(event14)));
+        xaEnd.onFailure(throwable -> handler.handle(Future.failedFuture(throwable)));
         xaEnd.onSuccess(event -> {
             executeAll(connection -> {
                 if (connectionState.get(connection) != State.XA_PREPARED) {
@@ -195,45 +231,62 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
                 }
                 return Future.succeededFuture();
             })
-                    .onFailure(event13 -> {
+                    .onFailure(throwable -> {
                         log.logPrepare(xid, false);
                         //客户端触发回滚
-                        handler.handle(Future.failedFuture(event13));
+                        handler.handle(Future.failedFuture(throwable));
                     })
-                    .onSuccess(event12 -> {
+                    .onSuccess(compositeFuture -> {
                         log.logPrepare(xid, true);
                         Future future;
                         try {
+                            /**
+                             * if log commit fail ,occur exception,other transcations rollback.
+                             */
                             log.logCommitBeforeXaCommit(xid);
-                            future= beforeCommit.get();
-                        }catch (Throwable throwable){
+                            /**
+                             * if native connection has inner commited,
+                             * but it didn't received the commit response.
+                             * should check the by manually.
+                             */
+                            future = beforeCommit.get();
+                        } catch (Throwable throwable) {
                             future = Future.failedFuture(throwable);
                         }
-                        future.onFailure((Handler<Throwable>) event17 -> {
-                            log.logCancelLocalCommitBeforeXaCommit(xid);
+                        future.onFailure((Handler<Throwable>) throwable -> {
+                            log.logCancelCommitBeforeXaCommit(xid);
                             //客户端触发回滚
-                            handler.handle(Future.failedFuture(event17));
+                            /**
+                             * the client received exception ,it must  rollback.
+                             */
+                            handler.handle(Future.failedFuture(throwable));
                         });
                         future.onSuccess(event16 -> {
                             executeAll(connection -> {
                                 return connection.query(String.format(XA_COMMIT, xid)).execute()
                                         .map(c -> changeTo(connection, State.XA_COMMITED));
                             })
-                                    .onFailure(event15 -> {
+                                    .onFailure(ignored -> {
+
                                         log.logCommit(xid, false);
                                         //retry
                                         retryCommit(handler);
                                     })
-                                    .onSuccess(event1 -> {
+                                    .onSuccess(ignored -> {
                                         inTranscation = false;
                                         log.logCommit(xid, true);
-                                        clearConnections(event2 -> handler.handle(((AsyncResult) event1)));
+                                        clearConnections(result -> handler.handle(((AsyncResult) result)));
                                     });
                         });
                     });
         });
     }
 
+    /**
+     * use new connection to retry the connection.
+     *
+     * @param handler
+     */
     private void retryCommit(Handler<AsyncResult<Void>> handler) {
         CompositeFuture all = CompositeFuture.all(computePrepareCommittedTargets().stream()
                 .map(s -> mySQLManager.getConnection(s)
@@ -262,7 +315,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         List<String> collect = connectionState.entrySet().stream()
                 .filter(i -> i.getValue() != State.XA_COMMITED)
                 .map(i -> i.getKey())
-                .map(k -> getTarget(k)).collect(Collectors.toList());
+                .map(k -> getDatasourceName(k)).collect(Collectors.toList());
         return collect;
     }
 
@@ -270,7 +323,7 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         List<String> collect = connectionState.entrySet().stream()
                 .filter(i -> i.getValue() != State.XA_ROLLBACKED)
                 .map(i -> i.getKey())
-                .map(k -> getTarget(k)).collect(Collectors.toList());
+                .map(k -> getDatasourceName(k)).collect(Collectors.toList());
         return collect;
     }
 
@@ -282,9 +335,12 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
         return CompositeFuture.all(futures);
     }
 
+    /**
+     * @param handler
+     */
     public void close(Handler<AsyncResult<Void>> handler) {
         if (inTranscation) {
-            rollback((Handler<AsyncResult<Void>>) handler);
+            rollback(ignored -> clearConnections(event -> handler.handle(Future.succeededFuture())));
         } else {
             clearConnections(event -> handler.handle(Future.succeededFuture()));
         }
@@ -292,16 +348,35 @@ public class BaseXaSqlConnection extends AbstractXaSqlConnection {
 
     public void closeStatementState(Handler<AsyncResult<Void>> handler) {
         if (!inTranscation) {
+            xid = null;
             clearConnections(handler);
         }
     }
 
+    /**
+     * before clear connections,it should check not be in transaction
+     *
+     * @param handler
+     */
     private void clearConnections(Handler<AsyncResult<Void>> handler) {
-        executeAll(c -> c.close()).onComplete(event -> {
-            if (event.failed()) {
-                //记录日志
-            }
-        });
+        Future future;
+        if (inTranscation) {
+            future = executeAll(c -> {
+                Future objectFuture;
+                if (c instanceof MySQLConnection) {
+                    MySQLConnection c1 = (MySQLConnection) c;
+                    objectFuture = c1.resetConnection();
+                } else {
+                    objectFuture = Future.succeededFuture();
+                }
+                return objectFuture.onComplete(ignored -> c.close());
+            });
+        } else {
+            future = executeAll(c -> {
+                return c.close();
+            });
+        }
+
         inTranscation = false;
         map.clear();
         connectionState.clear();

@@ -2,7 +2,6 @@ package io.mycat.util;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 public class JsonUtil {
     public static Map<String, String> urlSplit(String s){

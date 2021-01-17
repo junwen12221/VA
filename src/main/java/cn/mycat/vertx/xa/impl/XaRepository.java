@@ -13,11 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package cn.mycat.vertx.xa.log;
+package cn.mycat.vertx.xa.impl;
+
+import cn.mycat.vertx.xa.ImmutableCoordinatorLog;
+import cn.mycat.vertx.xa.Repository;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 
 import java.util.Collection;
 
 public class XaRepository implements Repository {
+    private final static Logger LOGGER = LoggerFactory.getLogger(XaRepository.class);
     final Repository memoryRepository = new MemoryRepositoryImpl();
     final Repository persistenceRepository;
 
@@ -32,18 +38,18 @@ public class XaRepository implements Repository {
     }
 
     @Override
-    public void put(String id, ImmutableCoordinatorLog coordinatorLog) {
-        memoryRepository.put(id, coordinatorLog);
+    public void put(String xid, ImmutableCoordinatorLog coordinatorLog) {
+        memoryRepository.put(xid, coordinatorLog);
     }
 
     @Override
-    public void remove(String id) {
-        memoryRepository.remove(id);
+    public void remove(String xid) {
+        memoryRepository.remove(xid);
     }
 
     @Override
-    public ImmutableCoordinatorLog get(String coordinatorId) {
-        return memoryRepository.get(coordinatorId);
+    public ImmutableCoordinatorLog get(String xid) {
+        return memoryRepository.get(xid);
     }
 
     @Override

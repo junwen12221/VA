@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-package cn.mycat.vertx.xa.log;
+package cn.mycat.vertx.xa;
 
-import cn.mycat.vertx.xa.State;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 
 public class ImmutableParticipantLog {
+    private final static Logger LOGGER = LoggerFactory.getLogger(ImmutableParticipantLog.class);
     private final String target;
     private final long expires;
     private final State state;

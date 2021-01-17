@@ -23,7 +23,6 @@ public class SimpleConfig {
     private String password;
     private String database;
     private int maxSize;
-    public static final boolean DEFAULT_USE_AFFECTED_ROWS = true;
 
     public SimpleConfig(String host, int port, String user, String password, String database, int maxSize) {
         this(host + ":" + port, host, port, user, password, database, maxSize);

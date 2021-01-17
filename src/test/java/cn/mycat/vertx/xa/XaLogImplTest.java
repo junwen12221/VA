@@ -1,12 +1,12 @@
 /**
  * Copyright [2021] [chen junwen]
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,6 +16,8 @@
 
 package cn.mycat.vertx.xa;
 
+import cn.mycat.vertx.xa.impl.MySQLManagerImpl;
+import cn.mycat.vertx.xa.impl.XaLogImpl;
 import com.alibaba.druid.pool.DruidPooledConnection;
 import com.alibaba.druid.util.JdbcUtils;
 import io.vertx.junit5.VertxExtension;
@@ -36,10 +38,23 @@ import static cn.mycat.vertx.xa.XaTestSuite.*;
 @ExtendWith(VertxExtension.class)
 public class XaLogImplTest {
 
+    private XaLog getDemoRepository() {
+        return XaLogImpl.createDemoRepository(new MySQLManagerImpl(
+                Arrays.asList(demoConfig("ds1", 3306)
+                        , demoConfig("ds2", 3307))));
+    }
+
+    private void forceClose(DruidPooledConnection mySQLConnection) throws SQLException {
+        DruidPooledConnection mySQLConnection1 = mySQLConnection;
+        mySQLConnection1.getConnection().close();
+        mySQLConnection1.abandond();
+        mySQLConnection1.close();
+    }
+
     @Test
-    public void demo(VertxTestContext testContext) throws Exception {
-        XaLogImpl demoRepository = getDemoRepository();
-        demoRepository.performXARecoveryLog(event -> {
+    public void nextXid(VertxTestContext testContext) throws Exception {
+        XaLog demoRepository = getDemoRepository();
+        demoRepository.readXARecoveryLog(event -> {
             Assertions.assertEquals("x.0", demoRepository.nextXid());
             Assertions.assertEquals("x.1", demoRepository.nextXid());
             testContext.completeNow();
@@ -47,15 +62,15 @@ public class XaLogImplTest {
     }
 
     @Test
-    public void demo2(VertxTestContext testContext) throws Exception {
-        XaLogImpl demoRepository = getDemoRepository();
+    public void commitOnePhaseButRecoveryNoEffect(VertxTestContext testContext) throws Exception {
+        XaLog demoRepository = getDemoRepository();
         {
             String xid = demoRepository.nextXid();
             demoRepository.beginXa(xid);
             Connection mySQLConnection = XaTestSuite.getMySQLConnection(DB1);
             extracteXaCmd(xid, mySQLConnection, XaSqlConnection.XA_START);
             demoRepository.log(xid, "ds1", State.XA_STARTED);
-            demoRepository.performXARecoveryLog(event -> {
+            demoRepository.readXARecoveryLog(event -> {
                 try {
                     extracteXaCmd(xid, mySQLConnection, XaSqlConnection.XA_END);
                     extracteXaCmd(xid, mySQLConnection, XaSqlConnection.XA_COMMIT_ONE_PHASE);
@@ -70,8 +85,8 @@ public class XaLogImplTest {
     }
 
     @Test
-    public void demo3(VertxTestContext testContext) throws SQLException, IOException {
-        XaLogImpl demoRepository = getDemoRepository();
+    public void commitOnePhaseButRecoveryNoEffect2(VertxTestContext testContext) throws SQLException, IOException {
+        XaLog demoRepository = getDemoRepository();
         {
             String xid = demoRepository.nextXid();
             demoRepository.beginXa(xid);
@@ -80,7 +95,7 @@ public class XaLogImplTest {
             extracteXaCmd(xid, mySQLConnection, XaSqlConnection.XA_END);
             demoRepository.log(xid, "ds1", State.XA_STARTED);
             demoRepository.log(xid, "ds1", State.XA_ENDED);
-            demoRepository.performXARecoveryLog(event -> {
+            demoRepository.readXARecoveryLog(event -> {
                 try {
                     extracteXaCmd(xid, mySQLConnection, XaSqlConnection.XA_COMMIT_ONE_PHASE);
                     testContext.completeNow();
@@ -94,19 +109,15 @@ public class XaLogImplTest {
 
     }
 
-    private XaLogImpl getDemoRepository() {
-        return XaLogImpl.createDemoRepository(new MySQLManagerImpl(Arrays.asList(demoConfig("ds1", 3306)
-                , demoConfig("ds2", 3307))));
-    }
 
     @Test
-    public void demo4(VertxTestContext testContext) throws Exception {
+    public void xaRecover(VertxTestContext testContext) throws Exception {
         Connection mySQLConnection = XaTestSuite.getMySQLConnection(DB1);
         try {
             extracteXaCmd("x.0", mySQLConnection, XaSqlConnection.XA_COMMIT);
         } catch (Throwable i) {
         }
-        XaLogImpl demoRepository = getDemoRepository();
+        XaLog demoRepository = getDemoRepository();
         String xid = demoRepository.nextXid();
         demoRepository.beginXa(xid);
 
@@ -117,7 +128,7 @@ public class XaLogImplTest {
         demoRepository.log(xid, "ds1", State.XA_ENDED);
         demoRepository.log(xid, "ds1", State.XA_PREPARED);
         forceClose((DruidPooledConnection) mySQLConnection);
-        demoRepository.performXARecoveryLog(event -> {
+        demoRepository.readXARecoveryLog(event -> {
             try {
                 Connection
                         connection = XaTestSuite.getMySQLConnection(DB1);
@@ -134,16 +145,10 @@ public class XaLogImplTest {
         });
     }
 
-    private void forceClose(DruidPooledConnection mySQLConnection) throws SQLException {
-        DruidPooledConnection mySQLConnection1 = mySQLConnection;
-        mySQLConnection1.getConnection().close();
-        mySQLConnection1.abandond();
-        mySQLConnection1.close();
-    }
 
     @Test
-    public void demo5(VertxTestContext testContext) throws Exception {
-        XaLogImpl demoRepository = getDemoRepository();
+    public void xaRecoverButCommited(VertxTestContext testContext) throws Exception {
+        XaLog demoRepository = getDemoRepository();
         {
             String xid = demoRepository.nextXid();
             demoRepository.beginXa(xid);
@@ -156,7 +161,7 @@ public class XaLogImplTest {
             demoRepository.log(xid, "ds1", State.XA_ENDED);
             demoRepository.log(xid, "ds1", State.XA_PREPARED);
             demoRepository.log(xid, "ds1", State.XA_COMMITED);
-            demoRepository.performXARecoveryLog(event -> {
+            demoRepository.readXARecoveryLog(event -> {
                 try {
                     Assertions.assertTrue(
                             JdbcUtils
@@ -171,9 +176,10 @@ public class XaLogImplTest {
             });
         }
     }
+
     @Test
-    public void demo6(VertxTestContext testContext) throws Exception {
-        XaLogImpl demoRepository = getDemoRepository();
+    public void xaFailAndXARecoverCommit(VertxTestContext testContext) throws Exception {
+        XaLog demoRepository = getDemoRepository();
         {
             String xid = demoRepository.nextXid();
             demoRepository.beginXa(xid);
@@ -202,7 +208,7 @@ public class XaLogImplTest {
             demoRepository.log(xid, "ds2", State.XA_PREPARED);
 
 
-            demoRepository.performXARecoveryLog(event -> {
+            demoRepository.readXARecoveryLog(event -> {
                 try {
                     Connection mySQLConnection1 = getMySQLConnection(DB2);
                     Assertions.assertTrue(
@@ -220,8 +226,8 @@ public class XaLogImplTest {
     }
 
     @Test
-    public void demo7(VertxTestContext testContext) throws Exception {
-        XaLogImpl demoRepository = getDemoRepository();
+    public void xaFailAndXARecoverRollback(VertxTestContext testContext) throws Exception {
+        XaLog demoRepository = getDemoRepository();
         {
             String xid = demoRepository.nextXid();
             demoRepository.beginXa(xid);
@@ -250,7 +256,7 @@ public class XaLogImplTest {
             demoRepository.log(xid, "ds2", State.XA_PREPARED);
 
 
-            demoRepository.performXARecoveryLog(event -> {
+            demoRepository.readXARecoveryLog(event -> {
                 try {
                     Connection mySQLConnection1 = getMySQLConnection(DB2);
                     Assertions.assertTrue(
@@ -266,6 +272,7 @@ public class XaLogImplTest {
             });
         }
     }
+
     private void extracteXaCmd(String xid, Connection mySQLConnection, String cmd) throws SQLException {
         JdbcUtils.execute(mySQLConnection, String.format(cmd, xid));
     }

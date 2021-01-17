@@ -16,6 +16,7 @@
 
 package cn.mycat.vertx.xa;
 
+import cn.mycat.vertx.xa.impl.XaLogImpl;
 import com.alibaba.druid.pool.DruidDataSource;
 import com.alibaba.druid.util.JdbcUtils;
 import io.mycat.util.JsonUtil;

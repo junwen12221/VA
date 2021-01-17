@@ -1,12 +1,12 @@
 /**
  * Copyright [2021] [chen junwen]
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,7 +31,6 @@ public interface XaSqlConnection {
     public static String XA_ROLLBACK = "XA ROLLBACK '%s';";
     public static String XA_COMMIT_ONE_PHASE = "XA COMMIT '%s' ONE PHASE;";
     public static String XA_RECOVER = "XA RECOVER;";
-    public static String CMD_ALLOC_XID = "ALLOC XID '%s'";
 
 
     public void begin(Handler<AsyncResult<Void>> handler);
@@ -42,7 +41,13 @@ public interface XaSqlConnection {
     public void rollback(Handler<AsyncResult<Void>> handler);
 
     public void commit(Handler<AsyncResult<Void>> handler);
+
+    /**inner interface
+     * @param beforeCommit for the native connection commit or some exception test
+     * @param handler
+     */
     public void commitXa(Supplier<Future> beforeCommit, Handler<AsyncResult<Void>> handler);
+
     public default void close() {
         close(event -> {
 
@@ -51,8 +56,16 @@ public interface XaSqlConnection {
 
     public void close(Handler<AsyncResult<Void>> handler);
 
+    /**
+     * a sql runs before call it;
+     * @param handler
+     */
     public void openStatementState(Handler<AsyncResult<Void>> handler);
 
+    /**
+     * a sql runs after call it;
+     * @param handler
+     */
     public void closeStatementState(Handler<AsyncResult<Void>> handler);
 
     public void setAutocommit(boolean b);

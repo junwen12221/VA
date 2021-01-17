@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package cn.mycat.vertx.xa;
+package io.mycat.util;
 
 import io.vertx.sqlclient.Row;
 

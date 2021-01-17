@@ -13,14 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package cn.mycat.vertx.xa;
+package cn.mycat.vertx.xa.impl;
 
+import cn.mycat.vertx.xa.MySQLManager;
+import cn.mycat.vertx.xa.XaLog;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.sqlclient.SqlConnection;
 
 public class LocalXaSqlConnection extends BaseXaSqlConnection {
+    private static final Logger LOGGER = LoggerFactory.getLogger(LocalXaSqlConnection.class);
     volatile SqlConnection localSqlConnection = null;
     volatile String targetName;
 

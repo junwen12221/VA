@@ -13,28 +13,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package cn.mycat.vertx.xa;
+package cn.mycat.vertx.xa.impl;
 
+import cn.mycat.vertx.xa.MySQLManager;
+import cn.mycat.vertx.xa.XaLog;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.mysqlclient.MySQLConnection;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.SqlConnection;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+/**
+ * xid  always be null;
+ */
 public class LocalSqlConnection extends AbstractXaSqlConnection {
+    private static final Logger LOGGER = LoggerFactory.getLogger(LocalSqlConnection.class);
     protected final ConcurrentHashMap<String, SqlConnection> map = new ConcurrentHashMap<>();
-
     protected final MySQLManager mySQLManager;
-    protected String xid;
 
     public LocalSqlConnection(MySQLManager mySQLManager, XaLog xaLog) {
         super(xaLog);
@@ -48,7 +54,6 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
             return;
         }
         inTranscation = true;
-        xid = null;
         handler.handle(Future.succeededFuture());
     }
 
@@ -103,12 +108,13 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
 
     @Override
     public void close(Handler<AsyncResult<Void>> handler) {
-        inTranscation = false;
-        List<Future> rollback = map.values().stream().map(c -> c.close()).collect(Collectors.toList());
-        CompositeFuture.all(rollback).onComplete(event -> {
-            //每一个记录日志
+        clearConnections(new Handler<AsyncResult<Void>>() {
+            @Override
+            public void handle(AsyncResult<Void> event) {
+                inTranscation = false;
+                handler.handle(Future.succeededFuture());
+            }
         });
-        handler.handle(Future.succeededFuture());
     }
 
     @Override
@@ -119,11 +125,22 @@ public class LocalSqlConnection extends AbstractXaSqlConnection {
     }
 
     private void clearConnections(Handler<AsyncResult<Void>> handler) {
-        executeAll(c -> c.close()).onComplete(event -> {
-            if (event.failed()) {
-                //记录日志
-            }
-        });
+        if (inTranscation) {
+            executeAll(c -> {
+                Future objectFuture;
+                if (c instanceof MySQLConnection) {
+                    MySQLConnection c1 = (MySQLConnection) c;
+                    objectFuture = c1.resetConnection();
+                } else {
+                    objectFuture = Future.succeededFuture();
+                }
+                return objectFuture.onComplete(ignored -> c.close());
+            });
+        } else {
+            executeAll(c -> {
+                return c.close();
+            });
+        }
         map.clear();
         handler.handle((Future) Future.succeededFuture());
     }

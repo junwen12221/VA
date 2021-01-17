@@ -1,12 +1,12 @@
 /**
  * Copyright [2021] [chen junwen]
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -14,9 +14,13 @@
  * limitations under the License.
  */
 
-package cn.mycat.vertx.xa.log;
+package cn.mycat.vertx.xa.impl;
 
+import cn.mycat.vertx.xa.ImmutableCoordinatorLog;
+import cn.mycat.vertx.xa.Repository;
 import io.vertx.core.Vertx;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.json.Json;
 
 import java.io.File;
@@ -32,8 +36,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class FileRepositoryImpl implements Repository {
-
-
+    private final static Logger LOGGER = LoggerFactory.getLogger(FileRepositoryImpl.class);
     private static final String FILE_SEPARATOR = String.valueOf(File.separatorChar);
     private final String baseDir;
     private final String suffix;
@@ -48,48 +51,48 @@ public class FileRepositoryImpl implements Repository {
 
     @Override
     public void init() {
-        this.timeHandler = this.vertx.setPeriodic(TimeUnit.SECONDS.toMillis(5), 
+        this.timeHandler = this.vertx.setPeriodic(TimeUnit.SECONDS.toMillis(5),
                 event -> vertx.executeBlocking(event1 -> {
-            try {
-                long now = System.currentTimeMillis();
-                Files.list(Paths.get(baseDir))
-                        .filter(path -> !Files.isDirectory(path) && path.toFile().getPath().endsWith(suffix))
-                        .filter(path -> {
-                            long l = path.toFile().lastModified();
-                            long ret = TimeUnit.MILLISECONDS.toSeconds(now - l);
-                            return ret > 1;
-                        }).forEach(new Consumer<Path>() {
-                    @Override
-                    public void accept(Path path) {
-                        try {
-                            ImmutableCoordinatorLog coordinatorLogEntry = Json.decodeValue(new String(Files.readAllBytes(path)), ImmutableCoordinatorLog.class);
-                            switch (coordinatorLogEntry.computeMinState()) {
-                                case XA_COMMITED:
-                                case XA_ROLLBACKED:
-                                    Files.delete(path);
-                                    break;
+                    try {
+                        long now = System.currentTimeMillis();
+                        Files.list(Paths.get(baseDir))
+                                .filter(path -> !Files.isDirectory(path) && path.toFile().getPath().endsWith(suffix))
+                                .filter(path -> {
+                                    long l = path.toFile().lastModified();
+                                    long ret = TimeUnit.MILLISECONDS.toSeconds(now - l);
+                                    return ret > 1;
+                                }).forEach(new Consumer<Path>() {
+                            @Override
+                            public void accept(Path path) {
+                                try {
+                                    ImmutableCoordinatorLog coordinatorLogEntry = Json.decodeValue(new String(Files.readAllBytes(path)), ImmutableCoordinatorLog.class);
+                                    switch (coordinatorLogEntry.computeMinState()) {
+                                        case XA_COMMITED:
+                                        case XA_ROLLBACKED:
+                                            Files.delete(path);
+                                            break;
+                                    }
+                                } catch (Throwable throwable) {
+
+                                }
                             }
-                        } catch (Throwable throwable) {
+                        });
+                    } catch (Throwable e) {
 
-                        }
+                    } finally {
+                        event1.complete();
                     }
-                });
-            } catch (Throwable e) {
-
-            } finally {
-                event1.complete();
-            }
-        }));
+                }));
     }
 
     @Override
-    public void put(String id, ImmutableCoordinatorLog coordinatorLog) {
-        Path resolve = getPath(id);
+    public void put(String xid, ImmutableCoordinatorLog coordinatorLog) {
+        Path resolve = getPath(xid);
         try {
             if (!Files.exists(resolve)) {
                 Files.createFile(resolve);
             }
-            Files.write(resolve,Json.encode(coordinatorLog).getBytes(StandardCharsets.UTF_8));
+            Files.write(resolve,coordinatorLog.toJson().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -100,19 +103,19 @@ public class FileRepositoryImpl implements Repository {
     }
 
     @Override
-    public void remove(String id) {
+    public void remove(String xid) {
         try {
-            Files.deleteIfExists(getPath(id));
+            Files.deleteIfExists(getPath(xid));
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     @Override
-    public ImmutableCoordinatorLog get(String coordinatorId) {
-        Path path = getPath(coordinatorId);
+    public ImmutableCoordinatorLog get(String xid) {
+        Path path = getPath(xid);
         try {
-            return   Json.decodeValue(new String(Files.readAllBytes(path)), ImmutableCoordinatorLog.class);
+            return Json.decodeValue(new String(Files.readAllBytes(path)), ImmutableCoordinatorLog.class);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

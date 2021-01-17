@@ -16,6 +16,9 @@
 
 package cn.mycat.vertx.xa;
 
+/**
+ * Mark the state of reach(ed)
+ */
 public enum State {
     XA_INITED,
     XA_STARTED,

@@ -21,11 +21,9 @@ import io.vertx.core.Vertx;
 import io.vertx.sqlclient.SqlConnection;
 
 
-interface MySQLManager {
+public interface MySQLManager {
 
     Future<SqlConnection> getConnection(String targetName);
-
-    public String getDatasourceName(String host, int port);
 
     void close(Handler<Future> handler);
 

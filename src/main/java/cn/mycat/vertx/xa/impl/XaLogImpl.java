@@ -14,12 +14,9 @@
  * limitations under the License.
  */
 
-package cn.mycat.vertx.xa;
+package cn.mycat.vertx.xa.impl;
 
-import cn.mycat.vertx.xa.log.ImmutableCoordinatorLog;
-import cn.mycat.vertx.xa.log.ImmutableParticipantLog;
-import cn.mycat.vertx.xa.log.MemoryRepositoryImpl;
-import cn.mycat.vertx.xa.log.Repository;
+import cn.mycat.vertx.xa.*;
 import io.vertx.core.*;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
@@ -38,11 +35,12 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 public class XaLogImpl implements XaLog {
+    private final static Logger LOGGER = LoggerFactory.getLogger(XaLogImpl.class);
     private final String name;
     private final Repository xaRepository;
     private final AtomicLong xaIdSeq = new AtomicLong();
     private final MySQLManager mySQLManager;
-    private final static Logger LOGGER = LoggerFactory.getLogger(XaLogImpl.class);
+
 
     public XaLogImpl(Repository xaRepository, MySQLManager mySQLManager) {
         this("x", xaRepository, '.', mySQLManager);
@@ -55,7 +53,7 @@ public class XaLogImpl implements XaLog {
 
     }
 
-    public static XaLogImpl createDemoRepository(MySQLManager mySQLManager) {
+    public static XaLog createDemoRepository(MySQLManager mySQLManager) {
         return new XaLogImpl(new MemoryRepositoryImpl()
                 , mySQLManager);
     }
@@ -168,7 +166,7 @@ public class XaLogImpl implements XaLog {
         }
     }
 
-    public void performXARecoveryLog(Handler<AsyncResult<XaLog>> handler) {
+    public void readXARecoveryLog(Handler<AsyncResult<XaLog>> handler) {
         long id = 0;
         char seq = name.charAt(name.length() - 1);
         Collection<ImmutableCoordinatorLog> entries = xaRepository.getCoordinatorLogs();
@@ -314,18 +312,18 @@ public class XaLogImpl implements XaLog {
 
         synchronized (xaRepository) {
             ImmutableCoordinatorLog immutableCoordinatorLog = xaRepository.get(xid);
-            immutableCoordinatorLog.withCommited(true);
-            xaRepository.writeCommitedLog(immutableCoordinatorLog);
+            immutableCoordinatorLog.withCommit(true);
+            xaRepository.writeCommitLog(immutableCoordinatorLog);
         }
     }
 
 
     @Override
-    public void logCancelLocalCommitBeforeXaCommit(String xid) {
+    public void logCancelCommitBeforeXaCommit(String xid) {
         if (xid == null) return;
         //only log
         synchronized (xaRepository) {
-            xaRepository.cancelCommitedLog(xid);
+            xaRepository.cancelCommitLog(xid);
         }
     }
 
@@ -342,7 +340,7 @@ public class XaLogImpl implements XaLog {
 
     @Override
     public long retryDelay() {
-        return xaRepository.retryDelay();
+        return xaRepository.retryDelayTime();
     }
 
     @Override

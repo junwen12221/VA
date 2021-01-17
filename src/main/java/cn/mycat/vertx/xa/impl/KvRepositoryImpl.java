@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-package cn.mycat.vertx.xa.log;
+package cn.mycat.vertx.xa.impl;
 
+import cn.mycat.vertx.xa.ImmutableCoordinatorLog;
+import cn.mycat.vertx.xa.Repository;
 import io.vertx.core.impl.logging.Logger;
 import io.vertx.core.impl.logging.LoggerFactory;
 import io.vertx.core.json.Json;
@@ -25,9 +27,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class KvRepositoryImpl implements Repository {
+    private static final Logger LOGGER = LoggerFactory.getLogger(KvRepositoryImpl.class);
     private final String key;
     private final Map<String, String> map;
-    private static final Logger LOGGER = LoggerFactory.getLogger(KvRepositoryImpl.class);
+
 
     public KvRepositoryImpl(String key, Map<String, String> map) {
         this.key = key;
@@ -41,18 +44,18 @@ public class KvRepositoryImpl implements Repository {
     }
 
     @Override
-    public void put(String id, ImmutableCoordinatorLog coordinatorLog) {
-        this.map.put(id,Json.encode(coordinatorLog));
+    public void put(String xid, ImmutableCoordinatorLog coordinatorLog) {
+        this.map.put(xid,coordinatorLog.toJson());
     }
 
     @Override
-    public void remove(String id) {
-        this.map.remove(id);
+    public void remove(String xid) {
+        this.map.remove(xid);
     }
 
     @Override
-    public ImmutableCoordinatorLog get(String coordinatorId) {
-        String s = this.map.get(coordinatorId);
+    public ImmutableCoordinatorLog get(String xid) {
+        String s = this.map.get(xid);
         if (s!=null){
             return Json.decodeValue(s,ImmutableCoordinatorLog.class);
         }

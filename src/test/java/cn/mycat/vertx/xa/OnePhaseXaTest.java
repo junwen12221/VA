@@ -16,6 +16,9 @@
 
 package cn.mycat.vertx.xa;
 
+import cn.mycat.vertx.xa.impl.MySQLManagerImpl;
+import cn.mycat.vertx.xa.impl.OnePhaseXaSqlConnection;
+
 import java.util.Arrays;
 import java.util.function.BiFunction;
 

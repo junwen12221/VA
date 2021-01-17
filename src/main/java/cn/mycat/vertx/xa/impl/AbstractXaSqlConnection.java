@@ -13,13 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package cn.mycat.vertx.xa;
+package cn.mycat.vertx.xa.impl;
 
+import cn.mycat.vertx.xa.XaLog;
+import cn.mycat.vertx.xa.XaSqlConnection;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 
 public abstract class AbstractXaSqlConnection implements XaSqlConnection {
+    private final static Logger LOGGER = LoggerFactory.getLogger(AbstractXaSqlConnection.class);
     protected boolean autocommit;
     protected boolean inTranscation = false;
     protected  final XaLog log;
@@ -38,9 +43,13 @@ public abstract class AbstractXaSqlConnection implements XaSqlConnection {
         this.autocommit = autocommit;
     }
 
+    /**
+     *  a sql runs before call it,if autocommit = false,it should begin a transcation.
+     * @param handler
+     */
     @Override
     public void openStatementState(Handler<AsyncResult<Void>> handler) {
-        if (!autocommit) {
+        if (!isAutocommit()) {
             if (!isInTranscation()) {
                 begin(handler);
                 return;

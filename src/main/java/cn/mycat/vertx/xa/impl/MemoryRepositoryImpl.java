@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-package cn.mycat.vertx.xa.log;
+package cn.mycat.vertx.xa.impl;
+
+import cn.mycat.vertx.xa.ImmutableCoordinatorLog;
+import cn.mycat.vertx.xa.Repository;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
@@ -22,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class MemoryRepositoryImpl implements Repository {
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(MemoryRepositoryImpl.class);
     private final Map<String, ImmutableCoordinatorLog> storage = new ConcurrentHashMap<>();
     private final ReentrantLock lock = new ReentrantLock();
     private boolean closed = true;
@@ -33,18 +38,18 @@ public class MemoryRepositoryImpl implements Repository {
     }
 
     @Override
-    public void put(String id, ImmutableCoordinatorLog coordinatorLog) {
+    public void put(String xid, ImmutableCoordinatorLog coordinatorLog) {
         lock.lock();
         try {
-            storage.put(id, coordinatorLog);
+            storage.put(xid, coordinatorLog);
         } finally {
             lock.unlock();
         }
     }
 
     @Override
-    public ImmutableCoordinatorLog get(String coordinatorId) {
-        return storage.get(coordinatorId);
+    public ImmutableCoordinatorLog get(String xid) {
+        return storage.get(xid);
     }
 
     @Override
@@ -69,15 +74,15 @@ public class MemoryRepositoryImpl implements Repository {
     }
 
     @Override
-    public void remove(String id) {
+    public void remove(String xid) {
         lock.lock();
         try {
-            ImmutableCoordinatorLog coordinatorLogEntry = storage.get(id);
+            ImmutableCoordinatorLog coordinatorLogEntry = storage.get(xid);
             if (coordinatorLogEntry != null) {
                 switch (coordinatorLogEntry.computeMinState()) {
                     case XA_COMMITED:
                     case XA_ROLLBACKED:
-                        storage.remove(id);
+                        storage.remove(xid);
                         break;
                     default:
                 }
