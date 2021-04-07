@@ -1,5 +1,8 @@
 # VA
 
+The project moved to
+[Mycat2](https://github.com/MyCATApache/Mycat2)
+
 VA ,MySQL Client XA Transcation Tools Based on Vertx.(incubate)
 
 ![](https://github.com/junwen12221/VA/workflows/maven/badge.svg)
